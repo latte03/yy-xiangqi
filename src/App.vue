@@ -80,6 +80,12 @@ function hideCheckNotice() {
   showCheckNotice.value = false;
 }
 
+function cancelAiIfAvailable() {
+  if (typeof game.cancelPendingAiMove === 'function') {
+    game.cancelPendingAiMove();
+  }
+}
+
 function startStandardGame() {
   activeEntry.value = 'standard';
   game.startNewGame();
@@ -87,7 +93,7 @@ function startStandardGame() {
 }
 
 function openCustomEditor() {
-  game.cancelPendingAiMove();
+  cancelAiIfAvailable();
   hideCheckNotice();
   activeEntry.value = 'custom';
   screen.value = 'editor';
@@ -99,7 +105,7 @@ function onCustomSubmitted() {
 }
 
 function goHome() {
-  game.cancelPendingAiMove();
+  cancelAiIfAvailable();
   hideCheckNotice();
   screen.value = 'home';
 }
@@ -109,7 +115,7 @@ function restartCurrent() {
     startStandardGame();
     return;
   }
-  game.cancelPendingAiMove();
+  cancelAiIfAvailable();
   hideCheckNotice();
   screen.value = 'editor';
 }
