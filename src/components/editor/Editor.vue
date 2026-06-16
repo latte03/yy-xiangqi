@@ -1,0 +1,484 @@
+<script setup lang="ts">
+/**
+ * 摆棋编辑器
+ * - 棋盘面板 (Konva) — 显示当前编辑中的棋盘, 支持拖放/点击放置/删除
+ * - 侧边棋子库 — 红方/黑方各 14 类棋子 (含将帅), 点击选中后可在棋盘点击放置
+ * - 校验提示 — 硬错误阻止提交, 软警告提示
+ * - 撤销/重做 + 清空 + 加载初始 + 提交到对局
+ *
+ * 实现思路:
+ * - 用 HTML5 drag and drop API 实现侧边 → 棋盘的拖放
+ * - 棋盘内拖动棋子 (从棋盘某格到另一格) 用 Konva 自定义拖拽
+ * - 点击格子: 调色板选中时放置; 无调色板选中且格子有子时进入"移动模式"
+ */
+
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
+import Konva from 'konva';
+import {
+  NCard,
+  NSpace,
+  NButton,
+  NTag,
+  NAlert,
+  NSelect,
+} from 'naive-ui';
+import type { Position, Color, PieceType } from '@/types';
+import { useEditorStore } from '@/stores/editor';
+import { useGameStore } from '@/stores/game';
+import { toFen } from '@/engine/fen';
+import {
+  addPiece,
+  drawBoardLayer,
+  FILES,
+  HEIGHT,
+  PIECE_LABELS_BLACK,
+  PIECE_LABELS_RED,
+  RANKS,
+  screenToCell,
+  WIDTH,
+} from '@/components/board/board-drawing';
+
+const editor = useEditorStore();
+const game = useGameStore();
+
+const emit = defineEmits<{
+  (e: 'submitted'): void;
+}>();
+
+const containerRef = ref<HTMLDivElement | null>(null);
+const firstMover = ref<'human' | 'ai'>('ai');
+const selectedCell = ref<Position | null>(null);
+let stage: Konva.Stage | null = null;
+let pieceLayer: Konva.Layer | null = null;
+let highlightLayer: Konva.Layer | null = null;
+let suppressNextClick = false;
+
+const PIECE_TYPES: PieceType[] = ['K', 'R', 'C', 'H', 'A', 'E', 'P'];
+
+const playerSideOptions = [
+  { label: '玩家执红，AI 执黑', value: 'human-red' },
+  { label: '玩家执黑，AI 执红', value: 'ai-red' },
+];
+
+const firstMoverOptions = [
+  { label: 'AI 先走', value: 'ai' },
+  { label: '玩家先走', value: 'human' },
+];
+
+const starterSide = computed<Color>(() => (firstMover.value === 'ai' ? game.aiSide : game.humanSide));
+const aiStarts = computed(() => firstMover.value === 'ai');
+const submitLabel = computed(() => (aiStarts.value ? '开始对战，AI 先走 →' : '开始对战，我方先走 →'));
+
+const fenPreview = computed(() =>
+  toFen({
+    board: editor.board,
+    side: starterSide.value,
+    halfmove: 0,
+    fullmove: 1,
+  }),
+);
+
+function drawBoard() {
+  if (!stage) return;
+  stage.destroyChildren();
+  const bg = new Konva.Layer();
+  stage.add(bg);
+  drawBoardLayer(bg);
+
+  pieceLayer = new Konva.Layer();
+  highlightLayer = new Konva.Layer();
+  stage.add(pieceLayer);
+  stage.add(highlightLayer);
+  redrawPieces();
+}
+
+function redrawPieces() {
+  if (!pieceLayer || !highlightLayer) return;
+  pieceLayer.destroyChildren();
+  highlightLayer.destroyChildren();
+  for (let r = 0; r < RANKS; r++) {
+    for (let f = 0; f < FILES; f++) {
+      const p = editor.board[r][f];
+      if (!p) continue;
+      const isSelected = selectedCell.value?.file === f && selectedCell.value?.rank === r;
+      const pieceNode = addPiece(pieceLayer, p, f, r, isSelected);
+      pieceNode.draggable(true);
+      pieceNode.on('mouseenter', () => {
+        if (stage) stage.container().style.cursor = 'grab';
+      });
+      pieceNode.on('mouseleave', () => {
+        if (stage) stage.container().style.cursor = editor.palette ? 'crosshair' : 'default';
+      });
+      pieceNode.on('dragstart', () => {
+        selectedCell.value = { file: f, rank: r };
+        pieceNode.moveToTop();
+        if (stage) stage.container().style.cursor = 'grabbing';
+        containerRef.value?.classList.add('dragging-piece');
+      });
+      pieceNode.on('dragend', () => {
+        containerRef.value?.classList.remove('dragging-piece');
+        if (stage) stage.container().style.cursor = 'grab';
+        suppressNextClick = true;
+        window.setTimeout(() => {
+          suppressNextClick = false;
+        }, 0);
+
+        const target = screenToCell(pieceNode.x(), pieceNode.y());
+        if (!target) {
+          redrawPieces();
+          return;
+        }
+
+        if (target.file === f && target.rank === r) {
+          selectedCell.value = target;
+          redrawPieces();
+          return;
+        }
+
+        selectedCell.value = target;
+        editor.movePiece({ file: f, rank: r }, target);
+      });
+    }
+  }
+  pieceLayer.batchDraw();
+  highlightLayer.batchDraw();
+}
+
+/** Konva 内点击/拖拽事件 */
+function onStageClick(_evt: Konva.KonvaEventObject<MouseEvent>) {
+  if (suppressNextClick) return;
+  if (!stage) return;
+  const pos = stage.getPointerPosition();
+  if (!pos) return;
+  const cell = screenToCell(pos.x, pos.y);
+  if (!cell) return;
+  handleCellAction(cell);
+}
+function handleCellAction(cell: Position) {
+  // 模式 1: 调色板选中 → 放置
+  if (editor.palette) {
+    editor.setSquare(cell, editor.palette);
+    selectedCell.value = cell;
+    return;
+  }
+
+  const piece = editor.board[cell.rank][cell.file];
+  if (piece) {
+    selectedCell.value = cell;
+    redrawPieces();
+    return;
+  }
+
+  if (selectedCell.value) {
+    editor.movePiece(selectedCell.value, cell);
+    selectedCell.value = cell;
+  }
+}
+
+onMounted(() => {
+  if (!containerRef.value) return;
+  stage = new Konva.Stage({ container: containerRef.value, width: WIDTH, height: HEIGHT });
+  drawBoard();
+  stage.on('click', onStageClick);
+  // 接受 HTML5 drag (从棋子库)
+  containerRef.value.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+  containerRef.value.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const data = e.dataTransfer?.getData('application/json');
+    if (!data) return;
+    try {
+      const payload = JSON.parse(data) as { type: PieceType; color: Color };
+      const rect = containerRef.value!.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const cell = screenToCell(x, y);
+      if (!cell) return;
+      editor.setSquare(cell, payload);
+    } catch {
+      // ignore
+    }
+  });
+});
+
+watch(
+  () => editor.board,
+  () => redrawPieces(),
+  { deep: true },
+);
+
+onBeforeUnmount(() => {
+  stage?.destroy();
+});
+
+function selectFromPalette(type: PieceType, color: Color) {
+  editor.selectPalettePiece({ type, color });
+}
+
+function clearPalette() {
+  editor.selectPalettePiece(null);
+}
+
+function deleteSelectedPiece() {
+  if (!selectedCell.value) return;
+  editor.deletePiece(selectedCell.value);
+  selectedCell.value = null;
+}
+
+function clearSelection() {
+  selectedCell.value = null;
+  redrawPieces();
+}
+
+function submitToGame() {
+  // 硬校验
+  if (editor.validation.hardErrors.length > 0) {
+    return;
+  }
+  // 把 editor.board 推给对局 store
+  const fen = toFen({
+    board: editor.board,
+    side: starterSide.value,
+    halfmove: 0,
+    fullmove: 1,
+  });
+  game.applyCustomPosition(fen);
+  emit('submitted');
+}
+
+function loadInitialLayout() {
+  editor.loadInitial();
+}
+
+function clearAll() {
+  editor.clearBoard();
+  selectedCell.value = null;
+}
+</script>
+
+<template>
+  <div class="editor-layout">
+    <div class="board-section">
+      <NCard title="编辑棋盘" size="small">
+        <div ref="containerRef" class="board-canvas"
+             :style="{ width: WIDTH + 'px', height: HEIGHT + 'px' }" />
+        <div class="board-actions">
+          <NSpace class="action-buttons">
+            <NButton size="small" @click="loadInitialLayout">加载初始局面</NButton>
+            <NButton size="small" @click="clearAll">清空棋盘</NButton>
+            <NButton size="small" :disabled="editor.history.length === 0" @click="editor.undo">
+              ↶ 撤销
+            </NButton>
+            <NButton size="small" :disabled="editor.redoStack.length === 0" @click="editor.redo">
+              ↷ 重做
+            </NButton>
+            <NButton size="small" :disabled="!selectedCell" @click="deleteSelectedPiece">
+              删除选中
+            </NButton>
+            <NButton size="small" :disabled="!selectedCell" @click="clearSelection">
+              取消选中
+            </NButton>
+          </NSpace>
+          <div class="editor-status">
+            <NTag v-if="editor.palette" type="warning" closable @close="clearPalette">
+              选中：{{ editor.palette.color === 'red' ? '红' : '黑' }}{{
+                editor.palette.color === 'red' ? PIECE_LABELS_RED[editor.palette.type] : PIECE_LABELS_BLACK[editor.palette.type]
+              }} (点击格子放置)
+            </NTag>
+            <NTag v-else-if="selectedCell" type="success" closable @close="clearSelection">
+              已选中：{{ String.fromCharCode(97 + selectedCell.file) }}{{ selectedCell.rank + 1 }}
+            </NTag>
+            <span v-else>可拖动棋盘上的棋子调整位置，点选后可删除。</span>
+          </div>
+        </div>
+      </NCard>
+    </div>
+
+    <div class="palette-section">
+      <NCard title="红方棋子库" size="small">
+        <div class="palette-grid">
+          <button
+            v-for="t in PIECE_TYPES"
+            :key="'r-' + t"
+            class="palette-piece red"
+            :class="{ active: editor.palette?.type === t && editor.palette?.color === 'red' }"
+            draggable="true"
+            @click="selectFromPalette(t, 'red')"
+            @dragstart="(e) => e.dataTransfer?.setData('application/json', JSON.stringify({ type: t, color: 'red' }))"
+          >
+            {{ PIECE_LABELS_RED[t] }}
+          </button>
+        </div>
+        <p class="palette-hint">点击选中后点棋盘放置；已摆棋子可拖动换位</p>
+      </NCard>
+
+      <NCard title="黑方棋子库" size="small" style="margin-top: 12px">
+        <div class="palette-grid">
+          <button
+            v-for="t in PIECE_TYPES"
+            :key="'b-' + t"
+            class="palette-piece black"
+            :class="{ active: editor.palette?.type === t && editor.palette?.color === 'black' }"
+            draggable="true"
+            @click="selectFromPalette(t, 'black')"
+            @dragstart="(e) => e.dataTransfer?.setData('application/json', JSON.stringify({ type: t, color: 'black' }))"
+          >
+            {{ PIECE_LABELS_BLACK[t] }}
+          </button>
+        </div>
+        <p class="palette-hint">点选棋盘上的棋子后可删除，也可拖动到新位置</p>
+      </NCard>
+
+      <NCard title="校验" size="small" style="margin-top: 12px">
+        <div v-if="editor.validation.hardErrors.length === 0 && editor.validation.warnings.length === 0"
+             class="ok-msg">✓ 摆棋合规，可以提交</div>
+        <NAlert v-for="(err, i) in editor.validation.hardErrors" :key="'e-' + i" type="error"
+                :title="'硬错误'" style="margin-bottom: 6px">
+          {{ err }}
+        </NAlert>
+        <NAlert v-for="(w, i) in editor.validation.warnings" :key="'w-' + i" type="warning"
+                :title="'提示'" style="margin-bottom: 6px">
+          {{ w }}
+        </NAlert>
+      </NCard>
+
+      <NCard title="提交" size="small" style="margin-top: 12px">
+        <NSpace vertical>
+          <div class="play-options">
+            <div class="option-field">
+              <span class="option-label">执方</span>
+              <NSelect
+                v-model:value="game.settings.side"
+                :options="playerSideOptions"
+              />
+            </div>
+            <div class="option-field">
+              <span class="option-label">首手</span>
+              <NSelect
+                v-model:value="firstMover"
+                :options="firstMoverOptions"
+              />
+            </div>
+          </div>
+          <NTag :type="aiStarts ? 'info' : 'success'">
+            {{ aiStarts ? `提交后 AI 走${starterSide === 'red' ? '红棋' : '黑棋'}，随后轮到玩家` : `提交后玩家走${starterSide === 'red' ? '红棋' : '黑棋'}` }}
+          </NTag>
+          <NButton type="primary" block size="large"
+                   :disabled="editor.validation.hardErrors.length > 0"
+                   @click="submitToGame">
+            {{ submitLabel }}
+          </NButton>
+          <details>
+            <summary>FEN 预览</summary>
+            <code class="fen">{{ fenPreview }}</code>
+          </details>
+        </NSpace>
+      </NCard>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.editor-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.board-section {
+  flex: 0 0 auto;
+}
+.palette-section {
+  flex: 1 1 280px;
+  min-width: 280px;
+  max-width: 360px;
+}
+.board-canvas {
+  border: 2px solid #5a3e1b;
+  border-radius: 4px;
+  cursor: crosshair;
+}
+.board-canvas.dragging-piece {
+  cursor: grabbing;
+}
+.board-actions {
+  margin-top: 12px;
+}
+.action-buttons {
+  min-height: 34px;
+}
+.editor-status {
+  min-height: 30px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  color: #a99472;
+  font-size: 13px;
+}
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.palette-piece {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid #5a3e1b;
+  background: #fff5dc;
+  font-family: serif;
+  font-size: 22px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  user-select: none;
+}
+.palette-piece:hover {
+  background: #fff;
+  transform: scale(1.05);
+}
+.palette-piece.active {
+  border-color: #ffd700;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+}
+.palette-piece.red {
+  color: #c0392b;
+}
+.palette-piece.black {
+  color: #1c1c1c;
+}
+.palette-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #888;
+}
+.ok-msg {
+  color: #27ae60;
+  font-size: 13px;
+}
+.play-options {
+  display: grid;
+  gap: 8px;
+}
+.option-field {
+  display: grid;
+  gap: 4px;
+}
+.option-label {
+  font-size: 12px;
+  color: #aaa;
+}
+.fen {
+  display: block;
+  margin-top: 6px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  word-break: break-all;
+  color: #aaa;
+}
+</style>

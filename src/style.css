@@ -1,0 +1,133 @@
+:root {
+  --page-bg: #120f0c;
+  --page-bg-deep: #090806;
+  --text-main: #f6ead4;
+  --text-muted: #b6a283;
+  --accent: #d2aa70;
+  --accent-strong: #b8643b;
+  --panel: rgba(24, 18, 14, 0.76);
+  --panel-border: rgba(236, 202, 142, 0.18);
+
+  font-family:
+    "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  color: var(--text-main);
+  background: var(--page-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100dvh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(184, 100, 59, 0.24), transparent 34rem),
+    radial-gradient(circle at 85% 18%, rgba(210, 170, 112, 0.13), transparent 30rem),
+    linear-gradient(140deg, #17110d 0%, var(--page-bg-deep) 62%, #1a100c 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+button:hover {
+  opacity: 0.95;
+}
+
+button:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+button:focus-visible,
+a:focus-visible,
+.n-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #ecdcb9;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(236, 202, 142, 0.14);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+.n-card {
+  background: var(--panel) !important;
+  border-color: var(--panel-border) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.22);
+}
+
+.n-card-header {
+  color: #fff0d3;
+}
+
+.n-button {
+  border-radius: 10px !important;
+  font-weight: 650;
+}
+
+.n-button--primary-type {
+  background: linear-gradient(145deg, #b8643b, #d2aa70) !important;
+  border: 0 !important;
+  color: #1e1209 !important;
+}
+
+.n-base-selection {
+  border-radius: 10px !important;
+}
+
+.n-statistic .n-statistic-label {
+  color: #a99472 !important;
+}
+
+.n-statistic .n-statistic-value {
+  color: #f5e5c8 !important;
+  font-variant-numeric: tabular-nums;
+}
