@@ -11,7 +11,7 @@ import {
 import ChessBoard from './components/board/ChessBoard.vue';
 import Editor from './components/editor/Editor.vue';
 import { useGameStore } from './stores/game';
-import type { Color, EndReason } from './types';
+import { endReasonLabel, endSummary, winnerLabel } from './utils/end-state';
 
 const game = useGameStore();
 
@@ -43,33 +43,23 @@ const currentTurnLabel = computed(() => {
   if (game.aiThinking) return 'AI 思考中';
   return `${side}${game.side === game.aiSide ? '（AI）' : '（玩家）'}`;
 });
+const statusTagType = computed(() => {
+  if (game.ended) return 'error';
+  return game.side === game.aiSide ? 'info' : 'success';
+});
+const restartActionLabel = computed(() => {
+  if (activeEntry.value === 'custom') return '重新摆棋';
+  return game.ended ? '再来一局' : '重新开局';
+});
 const movePairs = computed(() => game.moves.map((move, index) => ({
   index,
   label: `${index % 2 === 0 ? `${Math.floor(index / 2) + 1}. ` : ''}${move}`,
 })));
-const endReasonLabels: Record<EndReason, string> = {
-  checkmate: '将死',
-  stalemate: '困毙',
-  repetition: '重复局面',
-  'fifty-move': '自然限着',
-  resign: '认输',
-  timeout: '超时',
-};
-const resultReasonLabel = computed(() => {
-  const reason = game.endResult?.reason;
-  return reason ? endReasonLabels[reason] : '终局';
-});
-const resultWinnerLabel = computed(() => {
-  const winner = game.endResult?.winner;
-  if (!winner) return '和棋';
-  return `${sideLabel(winner)}胜`;
-});
+const resultReasonLabel = computed(() => endReasonLabel(game.endResult));
+const resultWinnerLabel = computed(() => winnerLabel(game.endResult?.winner));
+const resultSummary = computed(() => endSummary(game.endResult));
 
 let checkNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-
-function sideLabel(side: Color) {
-  return side === 'red' ? '红方' : '黑方';
-}
 
 function flashCheckNotice() {
   if (checkNoticeTimer) {
@@ -225,10 +215,10 @@ onBeforeUnmount(() => {
               <h1>{{ entryTitle }}</h1>
             </div>
             <div class="match-actions">
-              <NButton secondary @click="restartCurrent">
-                {{ activeEntry === 'standard' ? '重新开局' : '重新摆棋' }}
+              <NButton :type="game.ended ? 'primary' : 'default'" secondary @click="restartCurrent">
+                {{ restartActionLabel }}
               </NButton>
-              <NButton type="error" secondary :disabled="game.ended" @click="game.resignGame">
+              <NButton v-if="!game.ended" type="error" secondary @click="game.resignGame">
                 认输
               </NButton>
               <NButton tertiary @click="goHome">换入口</NButton>
@@ -238,10 +228,11 @@ onBeforeUnmount(() => {
           <div class="play-layout">
             <section class="board-panel">
               <div class="board-panel-head">
-                <NTag :bordered="false" :type="game.side === game.aiSide ? 'info' : 'success'">
+                <NTag :bordered="false" :type="statusTagType">
                   当前：{{ currentTurnLabel }}
                 </NTag>
-                <NTag v-if="game.inCheck" :bordered="false" type="error">将军</NTag>
+                <NTag v-if="game.ended" :bordered="false" type="error">{{ resultSummary }}</NTag>
+                <NTag v-else-if="game.inCheck" :bordered="false" type="error">将军</NTag>
               </div>
               <ChessBoard />
             </section>
@@ -254,10 +245,10 @@ onBeforeUnmount(() => {
                 <NStatistic label="限着" :value="game.halfmove" />
               </div>
 
-              <div v-if="game.ended" class="result-box">
-                <strong>终局</strong>
+              <div v-if="game.ended" class="result-box" role="status">
+                <strong>{{ resultWinnerLabel }}</strong>
                 <span>
-                  {{ resultReasonLabel }} · {{ resultWinnerLabel }}
+                  {{ resultReasonLabel }}
                 </span>
               </div>
 
@@ -542,6 +533,7 @@ h2 {
   gap: 8px;
   margin-bottom: 14px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .match-panel {
@@ -558,11 +550,26 @@ h2 {
 
 .result-box {
   display: grid;
-  gap: 4px;
-  padding: 12px;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(255, 216, 148, 0.24);
   border-radius: 12px;
-  background: rgba(49, 96, 67, 0.2);
-  color: #dff0c4;
+  background:
+    linear-gradient(135deg, rgba(255, 216, 148, 0.13), rgba(141, 46, 36, 0.12)),
+    rgba(32, 26, 20, 0.72);
+  color: #f7e8c7;
+}
+
+.result-box strong {
+  color: #fff4d4;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.result-box span {
+  color: #d9bf8e;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .check-notice {

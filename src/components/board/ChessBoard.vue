@@ -8,7 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Konva from 'konva';
 import { useGameStore } from '@/stores/game';
 import { generateLegalMoves } from '@/engine/legal';
-import type { EndReason } from '@/types';
+import { endSummary as formatEndSummary } from '@/utils/end-state';
 import {
   addPiece,
   CELL_SIZE,
@@ -28,21 +28,7 @@ const containerRef = ref<HTMLDivElement | null>(null);
 const selectedFrom = ref<{ file: number; rank: number } | null>(null);
 const validTargets = ref<Array<{ file: number; rank: number }>>([]);
 const lastAnimatedMoveCount = ref(0);
-const endReasonLabels: Record<EndReason, string> = {
-  checkmate: '将死',
-  stalemate: '困毙',
-  repetition: '重复局面',
-  'fifty-move': '自然限着',
-  resign: '认输',
-  timeout: '超时',
-};
-const endSummary = computed(() => {
-  const reason = game.endResult?.reason;
-  const winner = game.endResult?.winner;
-  const reasonLabel = reason ? endReasonLabels[reason] : '终局';
-  const winnerLabel = winner ? `${winner === 'red' ? '红方' : '黑方'}胜` : '和棋';
-  return `${reasonLabel} · ${winnerLabel}`;
-});
+const endSummary = computed(() => formatEndSummary(game.endResult));
 
 let stage: Konva.Stage | null = null;
 let boardLayer: Konva.Layer | null = null;
@@ -293,6 +279,7 @@ onBeforeUnmount(() => {
 }
 .end-overlay span {
   justify-self: center;
+  max-width: min(360px, calc(100% - 48px));
   padding: 8px 12px;
   border: 1px solid rgba(255, 232, 184, 0.24);
   border-radius: 999px;
@@ -300,6 +287,7 @@ onBeforeUnmount(() => {
   color: #ffe9bd;
   font-size: 15px;
   font-weight: 700;
+  line-height: 1.35;
 }
 .ai-error {
   margin-top: 8px;
