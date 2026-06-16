@@ -65,7 +65,7 @@ export const useGameStore = defineStore('game', () => {
     aiDelayTimer = null;
   }
 
-  function cancelPendingAiWork() {
+  function cancelPendingAiMove() {
     clearAiDelayTimer();
     aiRequestId += 1;
     aiThinking.value = false;
@@ -174,7 +174,7 @@ export const useGameStore = defineStore('game', () => {
    * 走法历史清空, 再根据当前走子方决定是否触发 AI。
    */
   function applyCustomPosition(fen: string) {
-    cancelPendingAiWork();
+    cancelPendingAiMove();
     const s = parseFen(fen);
     board.value = cloneBoard(s.board);
     side.value = s.side;
@@ -182,6 +182,7 @@ export const useGameStore = defineStore('game', () => {
     fullmove.value = s.fullmove;
     moves.value = [];
     lastMove.value = null;
+    lastAiError.value = null;
     ended.value = false;
     endResult.value = null;
     inCheck.value = isInCheck(board.value, side.value);
@@ -189,7 +190,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function resetToInitial() {
-    cancelPendingAiWork();
+    cancelPendingAiMove();
     const s = parseFen(INITIAL_FEN);
     board.value = cloneBoard(s.board);
     side.value = s.side;
@@ -197,6 +198,7 @@ export const useGameStore = defineStore('game', () => {
     fullmove.value = s.fullmove;
     moves.value = [];
     lastMove.value = null;
+    lastAiError.value = null;
     ended.value = false;
     endResult.value = null;
     inCheck.value = false;
@@ -223,7 +225,7 @@ export const useGameStore = defineStore('game', () => {
 
   function resignGame() {
     if (ended.value) return;
-    cancelPendingAiWork();
+    cancelPendingAiMove();
     ended.value = true;
     endResult.value = { winner: aiSide.value, reason: 'resign' };
     lastAiError.value = null;
@@ -251,5 +253,6 @@ export const useGameStore = defineStore('game', () => {
     playerMove,
     requestAiMove,
     resignGame,
+    cancelPendingAiMove,
   };
 });

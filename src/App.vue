@@ -82,6 +82,14 @@ function flashCheckNotice() {
   }, 1000);
 }
 
+function hideCheckNotice() {
+  if (checkNoticeTimer) {
+    clearTimeout(checkNoticeTimer);
+    checkNoticeTimer = null;
+  }
+  showCheckNotice.value = false;
+}
+
 function startStandardGame() {
   activeEntry.value = 'standard';
   game.startNewGame();
@@ -89,6 +97,8 @@ function startStandardGame() {
 }
 
 function openCustomEditor() {
+  game.cancelPendingAiMove();
+  hideCheckNotice();
   activeEntry.value = 'custom';
   screen.value = 'editor';
 }
@@ -99,6 +109,8 @@ function onCustomSubmitted() {
 }
 
 function goHome() {
+  game.cancelPendingAiMove();
+  hideCheckNotice();
   screen.value = 'home';
 }
 
@@ -107,22 +119,31 @@ function restartCurrent() {
     startStandardGame();
     return;
   }
+  game.cancelPendingAiMove();
+  hideCheckNotice();
   screen.value = 'editor';
 }
 
 watch(
   () => game.inCheck,
   (isInCheck) => {
-    if (isInCheck && screen.value === 'play') {
+    if (isInCheck && screen.value === 'play' && !game.ended) {
       flashCheckNotice();
     }
   },
 );
 
+watch(
+  () => game.ended,
+  (ended) => {
+    if (ended) {
+      hideCheckNotice();
+    }
+  },
+);
+
 onBeforeUnmount(() => {
-  if (checkNoticeTimer) {
-    clearTimeout(checkNoticeTimer);
-  }
+  hideCheckNotice();
 });
 </script>
 

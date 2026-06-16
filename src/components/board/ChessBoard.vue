@@ -4,10 +4,11 @@
  * 显示 9×10 棋盘 + 棋子 + 点击走棋
  */
 
-import { onMounted, ref, watch, onBeforeUnmount } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Konva from 'konva';
 import { useGameStore } from '@/stores/game';
 import { generateLegalMoves } from '@/engine/legal';
+import type { EndReason } from '@/types';
 import {
   addPiece,
   CELL_SIZE,
@@ -27,6 +28,21 @@ const containerRef = ref<HTMLDivElement | null>(null);
 const selectedFrom = ref<{ file: number; rank: number } | null>(null);
 const validTargets = ref<Array<{ file: number; rank: number }>>([]);
 const lastAnimatedMoveCount = ref(0);
+const endReasonLabels: Record<EndReason, string> = {
+  checkmate: '将死',
+  stalemate: '困毙',
+  repetition: '重复局面',
+  'fifty-move': '自然限着',
+  resign: '认输',
+  timeout: '超时',
+};
+const endSummary = computed(() => {
+  const reason = game.endResult?.reason;
+  const winner = game.endResult?.winner;
+  const reasonLabel = reason ? endReasonLabels[reason] : '终局';
+  const winnerLabel = winner ? `${winner === 'red' ? '红方' : '黑方'}胜` : '和棋';
+  return `${reasonLabel} · ${winnerLabel}`;
+});
 
 let stage: Konva.Stage | null = null;
 let boardLayer: Konva.Layer | null = null;
@@ -187,16 +203,31 @@ watch(
   },
 );
 
+watch(
+  () => game.ended,
+  (ended) => {
+    if (!ended) return;
+    selectedFrom.value = null;
+    validTargets.value = [];
+    drawPieces();
+    drawHints();
+  },
+);
+
 onBeforeUnmount(() => {
   stage?.destroy();
 });
 </script>
 
 <template>
-  <div class="board-wrapper">
+  <div class="board-wrapper" :class="{ 'is-ended': game.ended }">
     <div ref="containerRef" class="board-canvas" :style="{ width: WIDTH + 'px', height: HEIGHT + 'px' }" />
-    <div v-if="game.aiThinking" class="ai-badge">
+    <div v-if="game.aiThinking && !game.ended" class="ai-badge">
       <span>AI 思考中…</span>
+    </div>
+    <div v-if="game.ended" class="end-overlay" aria-live="polite">
+      <strong>本局结束</strong>
+      <span>{{ endSummary }}</span>
     </div>
     <div v-if="game.lastAiError" class="ai-error">
       AI 错误：{{ game.lastAiError }}
@@ -217,6 +248,12 @@ onBeforeUnmount(() => {
   border-radius: 20px;
   cursor: pointer;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.36);
+  transition: filter 200ms ease, opacity 200ms ease;
+}
+.board-wrapper.is-ended .board-canvas {
+  filter: grayscale(0.9) saturate(0.15) brightness(0.62);
+  opacity: 0.72;
+  cursor: default;
 }
 .ai-badge {
   position: absolute;
@@ -233,6 +270,36 @@ onBeforeUnmount(() => {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(8px);
   pointer-events: none;
+}
+.end-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  border-radius: 20px;
+  background: rgba(10, 10, 10, 0.42);
+  color: #f6ead4;
+  text-align: center;
+  pointer-events: none;
+}
+.end-overlay strong {
+  display: block;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: clamp(38px, 7vw, 72px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+.end-overlay span {
+  justify-self: center;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 232, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(20, 18, 16, 0.76);
+  color: #ffe9bd;
+  font-size: 15px;
+  font-weight: 700;
 }
 .ai-error {
   margin-top: 8px;
