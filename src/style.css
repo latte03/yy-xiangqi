@@ -97,37 +97,6 @@ code {
   min-height: 100dvh;
 }
 
-.n-card {
-  background: var(--panel) !important;
-  border-color: var(--panel-border) !important;
-  border-radius: 18px !important;
-  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.22);
-}
-
-.n-card-header {
-  color: #fff0d3;
-}
-
-.n-button {
-  border-radius: 10px !important;
-  font-weight: 650;
-}
-
-.n-button--primary-type {
-  background: linear-gradient(145deg, #b8643b, #d2aa70) !important;
-  border: 0 !important;
-  color: #1e1209 !important;
-}
-
-.n-base-selection {
-  border-radius: 10px !important;
-}
-
-.n-statistic .n-statistic-label {
-  color: #a99472 !important;
-}
-
 .n-statistic .n-statistic-value {
-  color: #f5e5c8 !important;
   font-variant-numeric: tabular-nums;
 }

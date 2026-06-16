@@ -8,6 +8,7 @@ import {
   NTag,
   darkTheme,
 } from 'naive-ui';
+import type { GlobalThemeOverrides } from 'naive-ui';
 import ChessBoard from './components/board/ChessBoard.vue';
 import Editor from './components/editor/Editor.vue';
 import { useGameStore } from './stores/game';
@@ -21,6 +22,186 @@ type Entry = 'standard' | 'custom';
 const screen = ref<Screen>('home');
 const activeEntry = ref<Entry>('standard');
 const showCheckNotice = shallowRef(false);
+
+const palette = {
+  bg: '#120f0c',
+  panel: 'rgba(24, 18, 14, 0.92)',
+  panelSoft: 'rgba(255, 244, 214, 0.07)',
+  panelHover: 'rgba(255, 244, 214, 0.11)',
+  border: 'rgba(236, 202, 142, 0.22)',
+  borderStrong: 'rgba(236, 202, 142, 0.42)',
+  text: '#f6ead4',
+  textSoft: '#d8c4a2',
+  muted: '#a99472',
+  gold: '#d2aa70',
+  goldHover: '#e4c184',
+  goldPressed: '#b98b4c',
+  clay: '#b8643b',
+  clayHover: '#cf7b4d',
+  clayPressed: '#964b2e',
+  green: '#5fae7a',
+  greenHover: '#78c791',
+  greenPressed: '#478a5c',
+  teal: '#58c7a2',
+  tealHover: '#78d8ba',
+  tealPressed: '#3d9879',
+  red: '#c85f4a',
+  redHover: '#df765f',
+  redPressed: '#9f4336',
+};
+
+const naiveThemeOverrides: GlobalThemeOverrides = {
+  common: {
+    baseColor: palette.bg,
+    bodyColor: palette.bg,
+    popoverColor: 'rgba(24, 18, 14, 0.98)',
+    cardColor: palette.panel,
+    modalColor: palette.panel,
+    inputColor: 'rgba(16, 12, 9, 0.72)',
+    tableColor: palette.panel,
+    primaryColor: palette.gold,
+    primaryColorHover: palette.goldHover,
+    primaryColorPressed: palette.goldPressed,
+    primaryColorSuppl: palette.clay,
+    infoColor: palette.teal,
+    infoColorHover: palette.tealHover,
+    infoColorPressed: palette.tealPressed,
+    infoColorSuppl: palette.teal,
+    successColor: palette.green,
+    successColorHover: palette.greenHover,
+    successColorPressed: palette.greenPressed,
+    successColorSuppl: palette.green,
+    warningColor: palette.gold,
+    warningColorHover: palette.goldHover,
+    warningColorPressed: palette.goldPressed,
+    warningColorSuppl: palette.gold,
+    errorColor: palette.red,
+    errorColorHover: palette.redHover,
+    errorColorPressed: palette.redPressed,
+    errorColorSuppl: palette.red,
+    textColorBase: palette.text,
+    textColor1: palette.text,
+    textColor2: palette.textSoft,
+    textColor3: palette.muted,
+    placeholderColor: 'rgba(216, 196, 162, 0.52)',
+    borderColor: palette.border,
+    dividerColor: 'rgba(236, 202, 142, 0.14)',
+    hoverColor: palette.panelHover,
+    pressedColor: 'rgba(184, 100, 59, 0.18)',
+    borderRadius: '10px',
+    borderRadiusSmall: '8px',
+    fontFamily:
+      '"Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+    fontWeightStrong: '700',
+  },
+  Button: {
+    borderRadiusTiny: '8px',
+    borderRadiusSmall: '9px',
+    borderRadiusMedium: '10px',
+    borderRadiusLarge: '12px',
+    fontWeight: '650',
+    color: 'rgba(255, 244, 214, 0.06)',
+    colorHover: 'rgba(255, 244, 214, 0.11)',
+    colorPressed: 'rgba(184, 100, 59, 0.18)',
+    colorFocus: 'rgba(255, 244, 214, 0.11)',
+    textColor: palette.textSoft,
+    textColorHover: palette.text,
+    textColorPressed: palette.text,
+    border: `1px solid ${palette.border}`,
+    borderHover: `1px solid ${palette.borderStrong}`,
+    borderPressed: `1px solid ${palette.clay}`,
+    borderFocus: `1px solid ${palette.gold}`,
+    colorPrimary: palette.gold,
+    colorHoverPrimary: palette.goldHover,
+    colorPressedPrimary: palette.goldPressed,
+    colorFocusPrimary: palette.goldHover,
+    textColorPrimary: '#1e1209',
+    textColorHoverPrimary: '#1e1209',
+    textColorPressedPrimary: '#1e1209',
+    textColorFocusPrimary: '#1e1209',
+    borderPrimary: '1px solid transparent',
+    borderHoverPrimary: '1px solid transparent',
+    borderPressedPrimary: '1px solid transparent',
+    borderFocusPrimary: `1px solid ${palette.goldHover}`,
+    colorError: 'rgba(200, 95, 74, 0.18)',
+    colorHoverError: 'rgba(200, 95, 74, 0.26)',
+    colorPressedError: 'rgba(200, 95, 74, 0.32)',
+    colorFocusError: 'rgba(200, 95, 74, 0.26)',
+    textColorError: '#ffb6a5',
+    textColorHoverError: '#ffd0c5',
+    textColorPressedError: '#ffd0c5',
+    textColorFocusError: '#ffd0c5',
+    textColorTextError: '#ffb6a5',
+    textColorTextHoverError: '#ffd0c5',
+    textColorTextPressedError: '#ffd0c5',
+    textColorTextFocusError: '#ffd0c5',
+    textColorGhostError: '#ffb6a5',
+    textColorGhostHoverError: '#ffd0c5',
+    textColorGhostPressedError: '#ffd0c5',
+    textColorGhostFocusError: '#ffd0c5',
+    borderError: '1px solid rgba(200, 95, 74, 0.38)',
+    borderHoverError: '1px solid rgba(223, 118, 95, 0.62)',
+    borderPressedError: '1px solid rgba(223, 118, 95, 0.72)',
+    borderFocusError: '1px solid rgba(223, 118, 95, 0.72)',
+  },
+  Select: {
+    menuBoxShadow: '0 18px 48px rgba(0, 0, 0, 0.42)',
+    peers: {
+      InternalSelection: {
+        borderRadius: '10px',
+        color: 'rgba(16, 12, 9, 0.72)',
+        colorActive: 'rgba(28, 20, 14, 0.94)',
+        textColor: palette.text,
+        placeholderColor: 'rgba(216, 196, 162, 0.52)',
+        border: `1px solid ${palette.border}`,
+        borderHover: `1px solid ${palette.borderStrong}`,
+        borderActive: `1px solid ${palette.gold}`,
+        borderFocus: `1px solid ${palette.gold}`,
+        boxShadowFocus: '0 0 0 2px rgba(210, 170, 112, 0.18)',
+        caretColor: palette.gold,
+        arrowColor: palette.gold,
+      },
+      InternalSelectMenu: {
+        borderRadius: '12px',
+        color: 'rgba(24, 18, 14, 0.98)',
+        optionTextColor: palette.textSoft,
+        optionTextColorActive: '#fff4d4',
+        optionColorPending: palette.panelHover,
+        optionColorActive: 'rgba(210, 170, 112, 0.18)',
+        optionColorActivePending: 'rgba(210, 170, 112, 0.24)',
+        optionCheckColor: palette.gold,
+      },
+    },
+  },
+  Tag: {
+    borderRadius: '8px',
+    fontWeightStrong: '700',
+    color: 'rgba(255, 244, 214, 0.08)',
+    textColor: palette.textSoft,
+    border: `1px solid ${palette.border}`,
+    colorPrimary: 'rgba(210, 170, 112, 0.18)',
+    textColorPrimary: '#ffe7b1',
+    borderPrimary: '1px solid rgba(210, 170, 112, 0.38)',
+    colorInfo: 'rgba(88, 199, 162, 0.18)',
+    textColorInfo: '#9fe8cf',
+    borderInfo: '1px solid rgba(88, 199, 162, 0.34)',
+    colorSuccess: 'rgba(95, 174, 122, 0.18)',
+    textColorSuccess: '#b9edc7',
+    borderSuccess: '1px solid rgba(95, 174, 122, 0.34)',
+    colorWarning: 'rgba(210, 170, 112, 0.18)',
+    textColorWarning: '#ffe2a7',
+    borderWarning: '1px solid rgba(210, 170, 112, 0.34)',
+    colorError: 'rgba(200, 95, 74, 0.2)',
+    textColorError: '#ffc1b2',
+    borderError: '1px solid rgba(200, 95, 74, 0.38)',
+  },
+  Statistic: {
+    labelTextColor: palette.muted,
+    valueTextColor: '#f5e5c8',
+    labelFontWeight: '600',
+    valueFontWeight: '650',
+  },
+};
 
 const difficultyOptions = [
   { label: '入门 depth 2', value: 'easy' },
@@ -144,7 +325,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <NConfigProvider :theme="darkTheme">
+  <NConfigProvider :theme="darkTheme" :theme-overrides="naiveThemeOverrides">
     <div class="app-shell">
       <header class="topbar">
         <button class="brand" type="button" @click="goHome">
@@ -224,7 +405,7 @@ onBeforeUnmount(() => {
               <NButton :type="game.ended ? 'primary' : 'default'" secondary @click="restartCurrent">
                 {{ restartActionLabel }}
               </NButton>
-              <NButton v-if="!game.ended" type="error" secondary @click="game.resignGame">
+              <NButton v-if="!game.ended" class="resign-button" type="error" secondary @click="game.resignGame">
                 认输
               </NButton>
               <NButton tertiary @click="goHome">换入口</NButton>
@@ -291,7 +472,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-shell {
-  min-height: 100dvh;
+  min-height: 90dvh;
   color: #f6ead4;
 }
 
@@ -354,6 +535,13 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.resign-button {
+  --n-text-color: #ffb6a5 !important;
+  --n-text-color-hover: #ffd0c5 !important;
+  --n-text-color-pressed: #ffd0c5 !important;
+  --n-text-color-focus: #ffd0c5 !important;
+}
+
 .main-stage {
   width: min(1240px, calc(100vw - 40px));
   margin: 0 auto;
@@ -361,7 +549,7 @@ onBeforeUnmount(() => {
 }
 
 .entry-screen {
-  min-height: calc(100dvh - 150px);
+  min-height: calc(100dvh - 170px);
   display: grid;
   align-content: center;
   gap: 34px;
