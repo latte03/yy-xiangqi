@@ -11,12 +11,13 @@ import {
 import type { GlobalThemeOverrides } from 'naive-ui';
 import ChessBoard from './components/board/ChessBoard.vue';
 import Editor from './components/editor/Editor.vue';
+import Training from './components/training/Training.vue';
 import { useGameStore } from './stores/game';
 import { endReasonLabel, endSummary, winnerLabel } from './utils/end-state';
 
 const game = useGameStore();
 
-type Screen = 'home' | 'editor' | 'play';
+type Screen = 'home' | 'editor' | 'play' | 'training';
 type Entry = 'standard' | 'custom';
 
 const screen = ref<Screen>('home');
@@ -215,7 +216,10 @@ const sideOptions = [
   { label: '玩家执黑，AI 执红', value: 'ai-red' },
 ];
 
-const entryTitle = computed(() => (activeEntry.value === 'standard' ? '普通对战' : '自定义残局'));
+const entryTitle = computed(() => {
+  if (screen.value === 'training') return '模型训练';
+  return activeEntry.value === 'standard' ? '普通对战' : '自定义残局';
+});
 const humanSideLabel = computed(() => (game.humanSide === 'red' ? '红方' : '黑方'));
 const aiSideLabel = computed(() => (game.aiSide === 'red' ? '红方' : '黑方'));
 const currentTurnLabel = computed(() => {
@@ -278,6 +282,12 @@ function openCustomEditor() {
   hideCheckNotice();
   activeEntry.value = 'custom';
   screen.value = 'editor';
+}
+
+function openTraining() {
+  cancelAiIfAvailable();
+  hideCheckNotice();
+  screen.value = 'training';
 }
 
 function onCustomSubmitted() {
@@ -383,6 +393,20 @@ onBeforeUnmount(() => {
                 进入摆棋工坊
               </NButton>
             </article>
+
+            <article class="entry-card training-entry">
+              <span class="entry-number">03</span>
+              <h2>模型训练</h2>
+              <p>把真实截图和正确 FEN 转成 crops，重新训练 ONNX 识别模型。</p>
+              <div class="entry-notes">
+                <span>提取真实裁剪</span>
+                <span>生成 dataset</span>
+                <span>训练并检查 ONNX</span>
+              </div>
+              <NButton type="primary" size="large" block @click="openTraining">
+                进入训练工作台
+              </NButton>
+            </article>
           </div>
         </section>
 
@@ -393,6 +417,15 @@ onBeforeUnmount(() => {
             <p>放置或删除棋子，检查合法性后进入对战。</p>
           </div>
           <Editor @submitted="onCustomSubmitted" />
+        </section>
+
+        <section v-else-if="screen === 'training'" class="editor-screen">
+          <div class="section-heading">
+            <p class="eyebrow">model training</p>
+            <h1>模型训练</h1>
+            <p>用真实截图修正识别模型，完成后回到自定义残局上传截图测试。</p>
+          </div>
+          <Training />
         </section>
 
         <section v-else class="play-screen">
@@ -601,7 +634,7 @@ h2 {
 
 .entry-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
 }
 

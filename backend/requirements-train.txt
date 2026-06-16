@@ -1,0 +1,7 @@
+# 仅训练 CNN 分类器时需要（本机运行，不随 App 分发）
+# 推理端只需主 requirements.txt 里的 onnxruntime
+-r requirements.txt
+torch>=2.1
+torchvision>=0.16
+onnx>=1.16
+onnxscript>=0.1.0

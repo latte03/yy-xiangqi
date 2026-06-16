@@ -100,3 +100,7 @@ code {
 .n-statistic .n-statistic-value {
   font-variant-numeric: tabular-nums;
 }
+
+.corner-modal {
+  overflow: visible;
+}

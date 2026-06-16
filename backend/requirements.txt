@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+opencv-python-headless>=4.9
+numpy>=1.26
+pydantic>=2.6
+Pillow>=10.0          # 训练数据生成
+onnxruntime>=1.17     # CNN 棋子分类器推理 (models/piece_classifier.onnx)
+# 打包: pyinstaller>=6.0  (随 Tauri sidecar 分发时再装)

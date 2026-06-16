@@ -21,11 +21,14 @@ import {
   NTag,
   NAlert,
   NSelect,
+  NModal,
 } from 'naive-ui';
+import RecognizeCorners from './RecognizeCorners.vue';
 import type { Position, Color, PieceType } from '@/types';
 import { useEditorStore } from '@/stores/editor';
 import { useGameStore } from '@/stores/game';
 import { toFen } from '@/engine/fen';
+import { recognizeImage, checkBackend } from '@/utils/recognize-api';
 import {
   addPiece,
   drawBoardLayer,
@@ -248,6 +251,87 @@ function submitToGame() {
   emit('submitted');
 }
 
+// ---------- 截图识别 ----------
+const recognizeInput = ref<HTMLInputElement | null>(null);
+const recognizing = ref(false);
+const recognizeMsg = ref<string>('');
+const recognizeError = ref<string>('');
+const reviewCount = ref(0); // 需人工复核的格子数
+const pendingFile = ref<File | null>(null); // 待识别的截图
+const showCornerPicker = ref(false); // 框选四角弹窗
+const cornerModalEntered = ref(false);
+
+function pickScreenshot() {
+  recognizeError.value = '';
+  recognizeInput.value?.click();
+}
+
+function onScreenshotChosen(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 允许重复选同一文件
+  if (!file) return;
+  // 选好图后先进「框选四角」弹窗，用户可选自动定位或手动拖角
+  pendingFile.value = file;
+  recognizeMsg.value = '';
+  recognizeError.value = '';
+  cornerModalEntered.value = false;
+  showCornerPicker.value = true;
+}
+
+/** corners 为空 = 走后端自动定位；非空 = 手动四角 */
+async function runRecognize(corners?: string) {
+  const file = pendingFile.value;
+  if (!file) return;
+  showCornerPicker.value = false;
+  recognizing.value = true;
+  recognizeMsg.value = '';
+  recognizeError.value = '';
+  reviewCount.value = 0;
+  try {
+    const health = await checkBackend();
+    if (!health.online) {
+      recognizeError.value = '识别服务未启动。请先运行本地后端 (backend/)，详见 backend/README.md。';
+      return;
+    }
+    if (!health.modelReady) {
+      recognizeError.value =
+        health.message || 'CNN 模型未就绪。请先训练并放置 backend/models/piece_classifier.onnx。';
+      return;
+    }
+    const res = await recognizeImage(file, { side: starterSide.value, corners });
+    if (!res.ok) {
+      recognizeError.value =
+        (res.message || '识别失败') + '。可重新上传并手动框选四角再试。';
+      return;
+    }
+    editor.loadFen(res.fen);
+    reviewCount.value = res.low_confidence?.length ?? 0;
+    recognizeMsg.value =
+      `识别完成，已填入 ${res.cells.length} 个子。` +
+      (reviewCount.value > 0
+        ? `其中 ${reviewCount.value} 个置信较低，请在棋盘上核对纠正。`
+        : '请核对无误后提交。') +
+      (res.message ? `（${res.message}）` : '');
+  } catch (err) {
+    recognizeError.value = err instanceof Error ? err.message : '识别请求出错。';
+  } finally {
+    recognizing.value = false;
+  }
+}
+
+function onCornerConfirm(corners: string) {
+  runRecognize(corners);
+}
+function onCornerAuto() {
+  runRecognize(undefined);
+}
+function onCornerCancel() {
+  showCornerPicker.value = false;
+  cornerModalEntered.value = false;
+  pendingFile.value = null;
+}
+
 function loadInitialLayout() {
   editor.loadInitial();
 }
@@ -297,6 +381,46 @@ function clearAll() {
     </div>
 
     <div class="palette-section">
+      <NCard title="截图识别（实验）" size="small" style="margin-bottom: 12px">
+        <input
+          ref="recognizeInput"
+          type="file"
+          accept="image/*"
+          style="display: none"
+          @change="onScreenshotChosen"
+        />
+        <NSpace vertical size="small">
+          <NButton size="small" type="primary" :loading="recognizing" block @click="pickScreenshot">
+            {{ recognizing ? '识别中…' : '上传《燕云十六声》棋盘截图' }}
+          </NButton>
+          <p class="palette-hint">上传后可自动定位或手动框选四角；识别后可在棋盘上手动拖动纠正。</p>
+          <NAlert v-if="recognizeError" type="error" :show-icon="false">{{ recognizeError }}</NAlert>
+          <NAlert v-else-if="recognizeMsg" :type="reviewCount > 0 ? 'warning' : 'success'" :show-icon="false">
+            {{ recognizeMsg }}
+          </NAlert>
+        </NSpace>
+      </NCard>
+
+      <NModal
+        v-model:show="showCornerPicker"
+        preset="card"
+        title="框选棋盘四角"
+        style="width: min(96vw, 1280px); max-height: min(94vh, 920px)"
+        class="corner-modal"
+        :mask-closable="false"
+        @after-enter="cornerModalEntered = true"
+        @before-leave="cornerModalEntered = false"
+      >
+        <RecognizeCorners
+          v-if="pendingFile"
+          :file="pendingFile"
+          :is-enter="cornerModalEntered"
+          @confirm="onCornerConfirm"
+          @auto="onCornerAuto"
+          @cancel="onCornerCancel"
+        />
+      </NModal>
+
       <NCard title="红方棋子库" size="small">
         <div class="palette-grid">
           <button
