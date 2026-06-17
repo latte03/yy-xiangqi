@@ -464,4 +464,13 @@ def model_apply_update():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8765)
+    # 开发模式：设环境变量 XIANGQI_DEV=1 时自动热重载（改代码免手动重启）。
+    # reload 需用 import 字符串形式，故分两种启动方式。
+    dev = os.environ.get("XIANGQI_DEV") in ("1", "true", "True")
+    host = os.environ.get("XIANGQI_HOST", "127.0.0.1")
+    port = int(os.environ.get("XIANGQI_PORT", "8765"))
+    if dev:
+        print(f"[dev] 热重载已开启 → http://{host}:{port}")
+        uvicorn.run("app:app", host=host, port=port, reload=True)
+    else:
+        uvicorn.run(app, host=host, port=port)

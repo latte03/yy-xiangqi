@@ -27,6 +27,10 @@ cd backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python app.py          # 监听 127.0.0.1:8765
+
+# 开发模式（改代码自动热重载，免手动重启）：
+XIANGQI_DEV=1 python app.py
+# 可选：XIANGQI_HOST / XIANGQI_PORT 覆盖监听地址与端口
 ```
 
 前端默认请求 `http://127.0.0.1:8765`，可用环境变量 `VITE_RECOGNIZE_API` 覆盖。
@@ -173,13 +177,24 @@ python tools/train_locator.py --epochs 40
 
 > 安全：sha256 + onnxruntime 试加载双校验，任一步失败保留旧模型，绝不变砖。
 
-## 打包（后续）
+## 打包（PyInstaller → Tauri sidecar）
 
-PyInstaller 打成单二进制，作 Tauri 2 sidecar 随桌面 App 分发：
+由 `scripts/build-sidecar.sh <target-triple>` 完成（CI `release-app.yml` 已调用）：
+1. 把 `models/` 下的 onnx + labels + version 暂存到临时目录（**不含 .pt 训练 checkpoint**）。
+2. `pyinstaller --onefile app.py --add-data <staged>:models`，并 `--exclude-module` 掉
+   torch 等仅训练依赖（瘦身）、`--collect-submodules uvicorn`（补隐藏导入）。
+3. 产物按 `recognizer-<target-triple>` 命名搬进 `src-tauri/binaries/`，供 Tauri 作 externalBin。
 
+本地手动构建某平台：
 ```bash
-pip install pyinstaller
-pyinstaller -F app.py -n recognizer-$(uname -m) --add-data "models:models"
+pip install -r requirements.txt pyinstaller
+scripts/build-sidecar.sh aarch64-apple-darwin   # 或对应的 target triple
 ```
 
-详见 `docs/OCR与桌面端技术选型分析.md`。
+要点：
+- **不需要手写/提交 `.spec`**：脚本用 CLI 参数完成，且每次构建会重建临时 spec（`.gitignore` 已忽略 `backend/recognizer.spec`、`backend/dist`、`backend/build`）。
+- 二进制不入库（`.gitignore` 忽略 `src-tauri/binaries/*`），CI 现构建。
+- CI 只装 `requirements.txt`（不装 `requirements-train.txt`），配合 `--exclude-module` 体积更小。
+- macOS 分发需对二进制做代码签名/公证（在 tauri build 阶段处理）。
+
+详见 `docs/OCR与桌面端技术选型分析.md` 与 `docs/release.md`。

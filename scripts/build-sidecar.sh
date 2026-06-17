@@ -56,6 +56,18 @@ if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
   fi
 fi
 
+# 仅训练/无关的大依赖，排除以瘦身（推理端 app.py 不导入这些）
+exclude_modules=(
+  torch torchvision onnx onnxscript
+  matplotlib scipy pandas
+  tkinter PyQt5 PyQt6 PySide2 PySide6
+  IPython notebook pytest
+)
+exclude_args=()
+for m in "${exclude_modules[@]}"; do
+  exclude_args+=(--exclude-module "$m")
+done
+
 "$python_bin" -m PyInstaller \
   --noconfirm \
   --clean \
@@ -65,6 +77,8 @@ fi
   --distpath "$dist_path" \
   --workpath "$work_path" \
   --specpath "$spec_path" \
+  --collect-submodules uvicorn \
+  "${exclude_args[@]}" \
   --add-data "${models_path}${sep}models"
 
 if [[ "${RUNNER_OS:-}" == "Windows" ]]; then

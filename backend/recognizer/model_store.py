@@ -32,9 +32,10 @@ MODEL_FILES = ("piece_classifier.onnx", "board_locator.onnx")
 LABELS_FILE = "labels.txt"
 VERSION_FILE = "version.json"
 
-# 模型更新 manifest 默认地址（请改成你的仓库 Release，或用 env 覆盖）
+# 模型更新 manifest 默认地址（固定 tag models-latest，对齐 release-models.yml）。
+# 可用 env XIANGQI_MODELS_MANIFEST 覆盖；分发构建由 src-tauri 编译期 option_env! 注入。
 DEFAULT_MANIFEST_URL = (
-    "https://github.com/your-org/xiangqi-endgame/releases/latest/download/models.json"
+    "https://github.com/latte03/yy-xiangqi/releases/download/models-latest/models.json"
 )
 
 

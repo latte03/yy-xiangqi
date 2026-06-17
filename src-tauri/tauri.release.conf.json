@@ -1,13 +1,15 @@
 {
   "bundle": {
     "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/recognizer"]
+    "externalBin": [
+      "binaries/recognizer"
+    ]
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4M0NBNjc2RDM4NDk2NEIKUldSTGxvVFRkcVk4K0xwbFp0SDd2WWZ0NXdKN0pNQmpOYVgvQlBVVDIvS05vd0hZQ3I1QWdlUmsK",
       "endpoints": [
-        "https://github.com/<org>/<repo>/releases/latest/download/latest.json"
+        "https://github.com/latte03/yy-xiangqi/releases/download/app-latest/latest.json"
       ],
       "windows": {
         "installMode": "passive"

@@ -29,6 +29,7 @@ backend/models/*
 backend/uploads
 backend/locate_dataset
 backend/locate_labels
+backend/build
 
 # Editor directories and files
 .vscode/*
@@ -47,3 +48,11 @@ docs/samples/*
 # Tauri build output
 src-tauri/target
 src-tauri/gen
+
+# Tauri sidecar 二进制：由 PyInstaller 构建，体积大、按平台各自生成，不入库
+src-tauri/binaries/*
+!src-tauri/binaries/README.md
+
+# PyInstaller 后端打包产物（均为 build-sidecar.sh 生成的临时物，不入库）
+backend/dist
+backend/recognizer.spec
