@@ -34,3 +34,5 @@ backend/locate_labels
 *.njsproj
 *.sln
 *.sw?
+
+output
