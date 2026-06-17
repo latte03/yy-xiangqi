@@ -43,6 +43,69 @@ export const useGameStore = defineStore('game', () => {
     side: 'human-red',
   });
 
+  // 走子前的局面快照栈，用于「悔棋/撤销」（镜像对弈纠错兜底）
+  interface Snapshot {
+    board: typeof board.value;
+    side: Color;
+    halfmove: number;
+    fullmove: number;
+    moves: string[];
+    lastMove: Move | null;
+    ended: boolean;
+    endResult: { winner?: Color; reason?: EndReason } | null;
+    inCheck: boolean;
+  }
+  const history = ref<Snapshot[]>([]);
+  const HISTORY_LIMIT = 200;
+
+  function pushHistory() {
+    history.value.push({
+      board: cloneBoard(board.value),
+      side: side.value,
+      halfmove: halfmove.value,
+      fullmove: fullmove.value,
+      moves: [...moves.value],
+      lastMove: lastMove.value,
+      ended: ended.value,
+      endResult: endResult.value,
+      inCheck: inCheck.value,
+    });
+    if (history.value.length > HISTORY_LIMIT) history.value.shift();
+  }
+
+  function restoreSnapshot(s: Snapshot) {
+    board.value = cloneBoard(s.board);
+    side.value = s.side;
+    halfmove.value = s.halfmove;
+    fullmove.value = s.fullmove;
+    moves.value = [...s.moves];
+    lastMove.value = s.lastMove;
+    ended.value = s.ended;
+    endResult.value = s.endResult;
+    inCheck.value = s.inCheck;
+  }
+
+  const canUndo = computed(() => history.value.length > 0);
+
+  /**
+   * 悔棋：回退到「玩家（人类）回合」。
+   * AI 走完后会自动等玩家录子，所以一次悔棋应跳过 AI 那步、
+   * 直接让玩家重走上一手（修正点错/燕云实际走法不同的情况）。
+   */
+  function undoMove() {
+    if (history.value.length === 0) return;
+    cancelPendingAiMove();
+    let snap = history.value.pop()!;
+    while (snap.side === aiSide.value && history.value.length > 0) {
+      snap = history.value.pop()!;
+    }
+    restoreSnapshot(snap);
+    // 兜底：若只剩 AI 回合的局面（已退无可退到玩家回合），让 AI 重新走，避免卡住
+    if (!ended.value && side.value === aiSide.value) {
+      maybeRequestAiMove();
+    }
+  }
+
   const fen = computed(() =>
     toFen({
       board: board.value,
@@ -96,6 +159,7 @@ export const useGameStore = defineStore('game', () => {
         m.piece.type === move.piece.type,
     );
     if (!isLegal) return false;
+    pushHistory(); // 走子前存快照，供悔棋回退
     lastMove.value = move;
     board.value = applyMove(board.value, move);
     const isCapture = !!move.captured || move.piece.type === 'P';
@@ -186,6 +250,7 @@ export const useGameStore = defineStore('game', () => {
     ended.value = false;
     endResult.value = null;
     inCheck.value = isInCheck(board.value, side.value);
+    history.value = [];
     maybeRequestAiMove();
   }
 
@@ -202,6 +267,7 @@ export const useGameStore = defineStore('game', () => {
     ended.value = false;
     endResult.value = null;
     inCheck.value = false;
+    history.value = [];
   }
 
   function playerMove(from: { file: number; rank: number }, to: { file: number; rank: number }) {
@@ -247,6 +313,7 @@ export const useGameStore = defineStore('game', () => {
     endResult,
     inCheck,
     lastAiError,
+    canUndo,
     startNewGame,
     resetToInitial,
     applyCustomPosition,
@@ -254,5 +321,6 @@ export const useGameStore = defineStore('game', () => {
     requestAiMove,
     resignGame,
     cancelPendingAiMove,
+    undoMove,
   };
 });

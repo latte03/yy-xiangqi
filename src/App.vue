@@ -484,6 +484,9 @@ onBeforeUnmount(() => {
               <h1>{{ entryTitle }}</h1>
             </div>
             <div class="match-actions">
+              <NButton :disabled="!game.canUndo" secondary @click="game.undoMove">
+                ↶ 悔棋
+              </NButton>
               <NButton :type="game.ended ? 'primary' : 'default'" secondary @click="restartCurrent">
                 {{ restartActionLabel }}
               </NButton>
