@@ -18,7 +18,22 @@ const repo = arg('repo');
 const tag = arg('tag', 'models-latest');
 const dir = path.resolve(arg('dir', 'backend/models'));
 
-if (!Number.isInteger(version) || version <= 0) {
+function readVersion() {
+  if (Number.isInteger(version) && version > 0) return version;
+  const versionPath = path.join(dir, 'version.json');
+  if (!fs.existsSync(versionPath)) {
+    throw new Error('--version is required when version.json does not exist');
+  }
+  const value = Number.parseInt(JSON.parse(fs.readFileSync(versionPath, 'utf8')).version, 10);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${versionPath} must contain a positive integer version`);
+  }
+  return value;
+}
+
+const packageVersion = readVersion();
+
+if (!Number.isInteger(packageVersion) || packageVersion <= 0) {
   throw new Error('--version must be a positive integer');
 }
 if (!repo) throw new Error('--repo is required, for example latte03/yy-xiangqi');
@@ -30,7 +45,7 @@ for (const file of files) {
 }
 
 const manifest = {
-  version,
+  version: packageVersion,
   files: files.map((name) => ({
     name,
     url: `https://github.com/${repo}/releases/download/${tag}/${name}`,
@@ -39,6 +54,6 @@ const manifest = {
 };
 
 fs.writeFileSync(path.join(dir, 'models.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-fs.writeFileSync(path.join(dir, 'version.json'), `${JSON.stringify({ version }, null, 2)}\n`);
+fs.writeFileSync(path.join(dir, 'version.json'), `${JSON.stringify({ version: packageVersion }, null, 2)}\n`);
 
-console.log(`Wrote models.json/version.json for model package ${version}`);
+console.log(`Wrote models.json/version.json for model package ${packageVersion}`);

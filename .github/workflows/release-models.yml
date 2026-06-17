@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Numeric model package version, for example 3
-        required: true
+        description: Optional numeric model package version; leave empty to use backend/models/version.json
+        required: false
+        default: ""
       piece_url:
         description: Optional HTTPS URL to piece_classifier.onnx; leave empty to use backend/models
         required: false
@@ -52,8 +53,12 @@ jobs:
 
       - name: Write manifest
         run: |
+          version_arg=()
+          if [[ -n "${{ inputs.version }}" ]]; then
+            version_arg=(--version="${{ inputs.version }}")
+          fi
           node scripts/write-models-manifest.mjs \
-            --version="${{ inputs.version }}" \
+            "${version_arg[@]}" \
             --repo="${{ github.repository }}" \
             --tag="${{ inputs.tag }}" \
             --dir=backend/models
@@ -63,19 +68,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
+          MODEL_VERSION="$(node -p 'require("./backend/models/version.json").version')"
           flags=()
           if [[ "$PRERELEASE" == "true" ]]; then
             flags+=(--prerelease)
           fi
           if gh release view "${{ inputs.tag }}" >/dev/null 2>&1; then
             gh release edit "${{ inputs.tag }}" \
-              --title "Model package v${{ inputs.version }}" \
-              --notes "Model package v${{ inputs.version }}." \
+              --title "Model package v${MODEL_VERSION}" \
+              --notes "Model package v${MODEL_VERSION}." \
               "${flags[@]}"
           else
             gh release create "${{ inputs.tag }}" \
-              --title "Model package v${{ inputs.version }}" \
-              --notes "Model package v${{ inputs.version }}." \
+              --title "Model package v${MODEL_VERSION}" \
+              --notes "Model package v${MODEL_VERSION}." \
               "${flags[@]}"
           fi
           gh release upload "${{ inputs.tag }}" \
