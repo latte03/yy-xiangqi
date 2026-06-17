@@ -70,3 +70,32 @@ export async function checkModel(split = 'val'): Promise<TrainingStatus> {
     body: JSON.stringify({ split }),
   }));
 }
+
+// ---------------- 棋盘四角定位 CNN (截图 + 翻拍统一) ----------------
+
+export async function generateLocateData(payload: {
+  num: number;
+  val_frac: number;
+  photo_frac: number;
+  clean: boolean;
+  use_real_labels: boolean;
+}): Promise<TrainingStatus> {
+  return readStatus(await fetch(`${BASE}/training/gen-locate-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
+}
+
+export async function trainLocator(payload: {
+  epochs: number;
+  batch: number;
+  lr: number;
+  export_only: boolean;
+}): Promise<TrainingStatus> {
+  return readStatus(await fetch(`${BASE}/training/train-locator`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }));
+}

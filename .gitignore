@@ -21,6 +21,8 @@ backend/dataset
 backend/crops
 backend/models
 backend/uploads
+backend/locate_dataset
+backend/locate_labels
 
 # Editor directories and files
 .vscode/*

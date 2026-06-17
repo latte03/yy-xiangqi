@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import {
   NButton,
   NConfigProvider,
@@ -11,8 +11,16 @@ import {
 import type { GlobalThemeOverrides } from 'naive-ui';
 import ChessBoard from './components/board/ChessBoard.vue';
 import Editor from './components/editor/Editor.vue';
-import Training from './components/training/Training.vue';
 import { useGameStore } from './stores/game';
+
+// 训练工作台仅维护者/开发构建可见；分发给终端用户的构建不含训练入口。
+// 开发环境 (vite dev) 默认开启；其它构建需显式设 VITE_ENABLE_TRAINING=true。
+const TRAINING_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_TRAINING === 'true';
+// 仅在启用时才按需加载训练组件，分发构建会被拆成不加载的独立 chunk。
+const Training = TRAINING_ENABLED
+  ? defineAsyncComponent(() => import('./components/training/Training.vue'))
+  : null;
 import { endReasonLabel, endSummary, winnerLabel } from './utils/end-state';
 
 const game = useGameStore();
@@ -285,6 +293,7 @@ function openCustomEditor() {
 }
 
 function openTraining() {
+  if (!TRAINING_ENABLED) return;
   cancelAiIfAvailable();
   hideCheckNotice();
   screen.value = 'training';
@@ -394,7 +403,7 @@ onBeforeUnmount(() => {
               </NButton>
             </article>
 
-            <article class="entry-card training-entry">
+            <article v-if="TRAINING_ENABLED" class="entry-card training-entry">
               <span class="entry-number">03</span>
               <h2>模型训练</h2>
               <p>把真实截图和正确 FEN 转成 crops，重新训练 ONNX 识别模型。</p>
@@ -419,7 +428,7 @@ onBeforeUnmount(() => {
           <Editor @submitted="onCustomSubmitted" />
         </section>
 
-        <section v-else-if="screen === 'training'" class="editor-screen">
+        <section v-else-if="screen === 'training' && TRAINING_ENABLED && Training" class="editor-screen">
           <div class="section-heading">
             <p class="eyebrow">model training</p>
             <h1>模型训练</h1>
@@ -634,7 +643,7 @@ h2 {
 
 .entry-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 18px;
 }
 

@@ -29,6 +29,7 @@ import { useEditorStore } from '@/stores/editor';
 import { useGameStore } from '@/stores/game';
 import { toFen } from '@/engine/fen';
 import { recognizeImage, checkBackend } from '@/utils/recognize-api';
+import { checkModelUpdate, applyModelUpdate } from '@/utils/model-update-api';
 import {
   addPiece,
   drawBoardLayer,
@@ -204,6 +205,7 @@ onMounted(() => {
       // ignore
     }
   });
+  window.addEventListener('paste', onPaste);
 });
 
 watch(
@@ -214,6 +216,7 @@ watch(
 
 onBeforeUnmount(() => {
   stage?.destroy();
+  window.removeEventListener('paste', onPaste);
 });
 
 function selectFromPalette(type: PieceType, color: Color) {
@@ -266,17 +269,64 @@ function pickScreenshot() {
   recognizeInput.value?.click();
 }
 
-function onScreenshotChosen(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = ''; // 允许重复选同一文件
-  if (!file) return;
-  // 选好图后先进「框选四角」弹窗，用户可选自动定位或手动拖角
+/** 统一入口：选文件 / 粘贴 / 拖拽 都走这里 → 打开框选四角弹窗 */
+function startRecognizeFlow(file: File) {
+  if (!file.type.startsWith('image/')) {
+    recognizeError.value = '请提供图片（截图）文件。';
+    return;
+  }
   pendingFile.value = file;
   recognizeMsg.value = '';
   recognizeError.value = '';
   cornerModalEntered.value = false;
   showCornerPicker.value = true;
+}
+
+function onScreenshotChosen(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 允许重复选同一文件
+  if (file) startRecognizeFlow(file);
+}
+
+// 拖拽截图到识别卡片
+const dragOver = ref(false);
+function onRecognizeDragOver(e: DragEvent) {
+  if (e.dataTransfer?.types?.includes('Files')) {
+    e.preventDefault();
+    dragOver.value = true;
+  }
+}
+function onRecognizeDragLeave() {
+  dragOver.value = false;
+}
+function onRecognizeDrop(e: DragEvent) {
+  dragOver.value = false;
+  const file = e.dataTransfer?.files?.[0];
+  if (file) {
+    e.preventDefault();
+    startRecognizeFlow(file);
+  }
+}
+
+// 剪贴板粘贴截图 (Ctrl/Cmd+V)：桌面端最自然的导入方式
+function onPaste(e: ClipboardEvent) {
+  // 正在框选弹窗 / 输入框聚焦时不拦截
+  if (showCornerPicker.value) return;
+  const target = e.target as HTMLElement | null;
+  if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.kind === 'file' && it.type.startsWith('image/')) {
+      const file = it.getAsFile();
+      if (file) {
+        e.preventDefault();
+        startRecognizeFlow(file);
+      }
+      return;
+    }
+  }
 }
 
 /** corners 为空 = 走后端自动定位；非空 = 手动四角 */
@@ -317,6 +367,40 @@ async function runRecognize(corners?: string) {
     recognizeError.value = err instanceof Error ? err.message : '识别请求出错。';
   } finally {
     recognizing.value = false;
+  }
+}
+
+// ---------- 模型更新（软件内，走 GitHub Releases） ----------
+const modelUpdating = ref(false);
+const modelUpdateMsg = ref('');
+const hasModelUpdate = ref(false);
+
+async function onCheckModelUpdate() {
+  modelUpdating.value = true;
+  modelUpdateMsg.value = '';
+  hasModelUpdate.value = false;
+  try {
+    const res = await checkModelUpdate();
+    hasModelUpdate.value = !!res.has_update;
+    modelUpdateMsg.value = res.message + (res.has_update ? `（v${res.current_version} → v${res.latest_version}）` : '');
+  } catch (err) {
+    modelUpdateMsg.value = err instanceof Error ? err.message : '检查更新失败。';
+  } finally {
+    modelUpdating.value = false;
+  }
+}
+
+async function onApplyModelUpdate() {
+  modelUpdating.value = true;
+  modelUpdateMsg.value = '下载并应用中…';
+  try {
+    const res = await applyModelUpdate();
+    modelUpdateMsg.value = res.message;
+    if (res.ok) hasModelUpdate.value = false;
+  } catch (err) {
+    modelUpdateMsg.value = err instanceof Error ? err.message : '更新失败。';
+  } finally {
+    modelUpdating.value = false;
   }
 }
 
@@ -390,14 +474,30 @@ function clearAll() {
           @change="onScreenshotChosen"
         />
         <NSpace vertical size="small">
-          <NButton size="small" type="primary" :loading="recognizing" block @click="pickScreenshot">
-            {{ recognizing ? '识别中…' : '上传《燕云十六声》棋盘截图' }}
-          </NButton>
-          <p class="palette-hint">上传后可自动定位或手动框选四角；识别后可在棋盘上手动拖动纠正。</p>
+          <div
+            class="drop-zone"
+            :class="{ over: dragOver }"
+            @click="pickScreenshot"
+            @dragover="onRecognizeDragOver"
+            @dragleave="onRecognizeDragLeave"
+            @drop="onRecognizeDrop"
+          >
+            <span v-if="recognizing">识别中…</span>
+            <span v-else>点击上传 · 拖拽图片到此 · 或直接粘贴截图（Ctrl/Cmd+V）</span>
+          </div>
+          <p class="palette-hint">支持自动定位或手动框选四角；识别后可在棋盘上手动拖动纠正。</p>
           <NAlert v-if="recognizeError" type="error" :show-icon="false">{{ recognizeError }}</NAlert>
           <NAlert v-else-if="recognizeMsg" :type="reviewCount > 0 ? 'warning' : 'success'" :show-icon="false">
             {{ recognizeMsg }}
           </NAlert>
+
+          <div class="model-update-row">
+            <NButton size="tiny" :loading="modelUpdating" @click="onCheckModelUpdate">检查模型更新</NButton>
+            <NButton v-if="hasModelUpdate" size="tiny" type="primary" :loading="modelUpdating" @click="onApplyModelUpdate">
+              下载并更新
+            </NButton>
+          </div>
+          <p v-if="modelUpdateMsg" class="palette-hint">{{ modelUpdateMsg }}</p>
         </NSpace>
       </NCard>
 
@@ -578,6 +678,36 @@ function clearAll() {
   margin: 8px 0 0;
   font-size: 12px;
   color: #888;
+}
+.drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 64px;
+  padding: 12px;
+  border: 1.5px dashed rgba(236, 202, 142, 0.4);
+  border-radius: 10px;
+  background: rgba(255, 244, 214, 0.04);
+  color: #c8b48c;
+  font-size: 12.5px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.drop-zone:hover {
+  border-color: rgba(236, 202, 142, 0.7);
+  background: rgba(255, 244, 214, 0.08);
+}
+.drop-zone.over {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.1);
+  color: #ffe7b1;
+}
+.model-update-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
 }
 .ok-msg {
   color: #27ae60;

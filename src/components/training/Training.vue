@@ -16,7 +16,9 @@ import {
   checkModel,
   extractTrainingCrops,
   generateTrainingData,
+  generateLocateData,
   getTrainingStatus,
+  trainLocator,
   trainModel,
   type TrainingStatus,
 } from '@/utils/training-api';
@@ -50,6 +52,21 @@ const trainOptions = reactive({
   export_only: false,
 });
 
+// 棋盘定位 CNN（截图 + 翻拍统一）
+const locateDataOptions = reactive({
+  num: 4000,
+  val_frac: 0.12,
+  photo_frac: 0.5,
+  clean: true,
+  use_real_labels: true,
+});
+const locateTrainOptions = reactive({
+  epochs: 40,
+  batch: 64,
+  lr: 0.001,
+  export_only: false,
+});
+
 let pollTimer: number | null = null;
 
 const selectedFileLabel = computed(() => selectedFile.value?.name ?? '未选择截图');
@@ -65,6 +82,8 @@ const phaseLabel = computed(() => {
     'generate-data': '生成训练集',
     'train-model': '训练模型',
     'check-model': '检查模型',
+    'gen-locate-data': '生成定位数据',
+    'train-locator': '训练定位模型',
   };
   return map[status.value.phase] ?? status.value.phase;
 });
@@ -175,6 +194,25 @@ function runCheckModel() {
   runTask(() => checkModel('val'));
 }
 
+function runGenLocateData() {
+  runTask(() => generateLocateData({
+    num: locateDataOptions.num,
+    val_frac: locateDataOptions.val_frac,
+    photo_frac: locateDataOptions.photo_frac,
+    clean: locateDataOptions.clean,
+    use_real_labels: locateDataOptions.use_real_labels,
+  }));
+}
+
+function runTrainLocator() {
+  runTask(() => trainLocator({
+    epochs: locateTrainOptions.epochs,
+    batch: locateTrainOptions.batch,
+    lr: locateTrainOptions.lr,
+    export_only: locateTrainOptions.export_only,
+  }));
+}
+
 onBeforeUnmount(() => {
   stopPolling();
 });
@@ -224,6 +262,9 @@ function onAfterEnter() {
           </div>
           <NAlert v-if="selectedFile && fen.trim() && !corners.trim()" type="warning" :show-icon="false">
             提取 crops 需要手动框选四角，自动定位在真实截图上容易失败。
+          </NAlert>
+          <NAlert v-if="corners.trim()" type="success" :show-icon="false">
+            ✓ 提取 crops 时，这张「图 + 四角」会同时存为定位模型的训练标注（见下方第 4 步），一次手动框选两用。
           </NAlert>
           <NButton type="primary" :disabled="!canExtract" :loading="status.running && status.phase === 'extract-crops'" @click="runExtractCrops">
             提取 crops
@@ -280,6 +321,58 @@ function onAfterEnter() {
             检查模型
           </NButton>
         </NSpace>
+      </NCard>
+
+      <NCard title="4. 棋盘定位模型（截图 + 翻拍）" size="small">
+        <NAlert type="info" :show-icon="false" style="margin-bottom: 12px">
+          定位模型自动找棋盘四角，省去每次手动框选。第 1 步框过的四角已自动累积为真实标注；
+          下面「生成定位数据」勾选「混入真实标注」即可一并用上。无需手动框选时识别会自动定位。
+        </NAlert>
+        <div class="field-grid">
+          <label>
+            <span>合成样本总数</span>
+            <NInputNumber v-model:value="locateDataOptions.num" :min="500" :step="500" />
+          </label>
+          <label>
+            <span>翻拍样本占比</span>
+            <NInputNumber v-model:value="locateDataOptions.photo_frac" :min="0" :max="1" :step="0.1" />
+          </label>
+          <label>
+            <span>验证集比例</span>
+            <NInputNumber v-model:value="locateDataOptions.val_frac" :min="0.05" :max="0.4" :step="0.01" />
+          </label>
+          <label class="check-field">
+            <NCheckbox v-model:checked="locateDataOptions.use_real_labels">混入真实标注 (locate_labels)</NCheckbox>
+          </label>
+          <label class="check-field">
+            <NCheckbox v-model:checked="locateDataOptions.clean">生成前清空 locate_dataset</NCheckbox>
+          </label>
+        </div>
+        <NSpace style="margin-bottom: 16px">
+          <NButton type="primary" :disabled="status.running" :loading="status.running && status.phase === 'gen-locate-data'" @click="runGenLocateData">
+            生成定位数据
+          </NButton>
+        </NSpace>
+        <div class="field-grid">
+          <label>
+            <span>训练轮数</span>
+            <NInputNumber v-model:value="locateTrainOptions.epochs" :min="1" :step="1" />
+          </label>
+          <label>
+            <span>Batch</span>
+            <NInputNumber v-model:value="locateTrainOptions.batch" :min="8" :step="8" />
+          </label>
+          <label>
+            <span>学习率</span>
+            <NInputNumber v-model:value="locateTrainOptions.lr" :min="0.0001" :step="0.0001" />
+          </label>
+          <label class="check-field">
+            <NCheckbox v-model:checked="locateTrainOptions.export_only">只从 checkpoint 导出 ONNX</NCheckbox>
+          </label>
+        </div>
+        <NButton type="primary" :disabled="status.running" :loading="status.running && status.phase === 'train-locator'" @click="runTrainLocator">
+          {{ locateTrainOptions.export_only ? '导出定位 ONNX' : '训练定位模型' }}
+        </NButton>
       </NCard>
     </section>
 

@@ -109,12 +109,53 @@
 - 环境备查：沙箱有 `onnxruntime`(1.23) 可做推理，但无 torch/tf/sklearn 且无外网，
   CNN 训练需在本机进行（脚本可由我生成）。
 
-### 下一步（待用户拍板方向）
-- [ ] **分类泛化**：训练小型 CNN（合成字+增强 + 现有真实裁剪），导出 ONNX。
-      运行时已改为模型唯一入口，下一步是产出可用 `models/piece_classifier.onnx`。
-- [ ] **自动定位**：暂以手动框选为主；鲁棒方案随翻拍路一起做关键点 CNN。
-- [ ] 翻拍路：透视校正 + 小型 CNN 增强训练（与上面 CNN 合并）。
-- [ ] 桌面打包：PyInstaller 打后端为 sidecar，接入 Tauri 2。
+### 学习式定位 CNN（2026-06-17，截图+翻拍统一，已搭好待训练）
+- 经典 CV 自动定位已确认无法一步到位（半透明/线淡/面板倾斜/背景干扰），
+  用户拍板：上关键点 CNN，且与翻拍路合并（同一模型靠数据增强覆盖两 régime）。
+- 新增（沙箱无 torch，训练在本机）：
+  - `recognizer/locate_model.py`：LOC_INPUT=256、letterbox 预处理、四角归一化编解码（往返误差 0px）。
+  - `tools/gen_locate_data.py`：全场景合成（半透明面板+网格+九宫+河界+棋子）→ 随机背景+单应，
+    screenshot régime（弱透视/清晰）与 photo régime（强透视/反光/摩尔纹/模糊/偏色）混合，
+    标注四角；可 `--real-labels` 混入真实标注。已验证生成图+标注精确（截图/翻拍两类目视 OK）。
+  - `tools/train_locator.py`：小 CNN 回归 8 坐标(sigmoid)→ 导出 `models/board_locator.onnx`，
+    checkpoint+ONNX 校验+opset17，验证报四角平均像素误差(@256)。
+  - `recognizer/locate.py`：`CnnLocator`(onnxruntime) + `locate_corners()`（CNN 优先→经典回退→手动兜底）；
+    `pipeline.recognize` 已改用 `locate_corners`。桩 session 验证解码接线正确、在界内。
+  - 后端：`/health` 加 `locator_ready`；新增 `/training/gen-locate-data`、`/training/train-locator`；
+    `extract-crops` 带 corners 时自动把「图+四角」存进 `locate_labels/` 作定位真实标注（一举两得）。
+  - 前端：`training-api.ts` 加 `generateLocateData`/`trainLocator`；
+    `Training.vue` 新增「4. 棋盘定位模型」卡片（生成定位数据 + 训练定位模型，
+    含「混入真实标注」开关）；第 1 步框选四角时提示「图+四角」已同时存为定位标注。typecheck 通过。
+- 数据闭环：棋子训练第 1 步手动框四角 → extract-crops 带 corners → 后端存 `locate_labels/` →
+  生成定位数据勾「混入真实标注」即自动用上。手动框选越多，定位越准。
+- 待用户本机：`gen_locate_data.py` → `train_locator.py` 产出 `board_locator.onnx`，
+  就绪后自动定位走 CNN（截图+翻拍）。
+
+### 打包前置（2026-06-17）
+- 训练入口按构建开关 gate：`App.vue` 用 `import.meta.env.DEV || VITE_ENABLE_TRAINING==='true'`
+  控制；分发构建（生产、未设标志）**不含**「模型训练」入口，Training 组件用
+  `defineAsyncComponent` 按需加载、被拆为不加载的独立 chunk。首页入口网格改 auto-fit 适应 2/3 张卡。
+  `.env.example` 记录 `VITE_RECOGNIZE_API` 与 `VITE_ENABLE_TRAINING`。
+  - 约定：训练是维护者离线活；分发包是推理-only（onnxruntime），不含 torch，
+    内置预训练 onnx 作只读资产；终端用户只识别+手动纠正，无法/无需重训。
+- 截图导入增强（Editor）：除「点击上传」外，新增**拖拽图片到识别区** + **剪贴板粘贴 Ctrl/Cmd+V**
+  （桌面端最自然），统一走 `startRecognizeFlow`。typecheck 通过。
+
+### 更新策略（2026-06-17，打包前已敲定）
+- **整包更新**：Tauri 2 updater 插件 + GitHub Releases（前后端代码变动走这条）。需更新签名密钥，macOS 另需代码签名/公证。Tauri 接入阶段配。
+- **仅模型更新（in-app，走 GitHub Releases）**：模型当数据资产发布，App 内下载，不发整包。
+  - 发布侧：建模型 Release（如 tag `models-vN`），挂 `piece_classifier.onnx`、`board_locator.onnx`、`models.json`(版本号+各文件 url+sha256)。
+  - 加载策略：**用户数据目录（appData/models）优先 → 回退打包内置**。内置模型永远在，离线/下载失败都能用。
+  - 更新流程：拉 manifest → 比本地版本 → 下载 onnx → **校验 sha256 + onnxruntime 试加载** 通过才替换 + 热重载；任一步失败保留旧模型，不会变砖。
+  - 写入位置用平台标准用户数据目录（可被 env `XIANGQI_MODEL_DIR` 覆盖）；manifest 地址可被 env `XIANGQI_MODELS_MANIFEST` 覆盖。
+  - 实现：`recognizer/model_store.py`（路径解析/版本）；`/model/status`、`/model/check-update`、`/model/apply-update`；前端「检查模型更新」入口（对所有用户开放，属推理侧）。
+
+### 下一步
+- [ ] 本机训练定位 CNN，产出 `models/board_locator.onnx` 并在真实 screenshot_1..4 上验证四角精度。
+- [ ] 桌面打包：PyInstaller 打后端为 sidecar（含 models/ 两个 onnx），接入 Tauri 2；
+      打包构建保持 `VITE_ENABLE_TRAINING` 未设（训练入口不进分发包）。
+- [ ] Tauri updater（整包）+ 模型 Release 的 `models.json` 填真实仓库地址。
+- [ ] （可选）sidecar 冷启动过渡态、窗口最小尺寸/记忆等桌面化打磨。
 
 ## 待办 / 待确认
 
