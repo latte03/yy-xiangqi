@@ -7,7 +7,14 @@ const BASE =
 
 export interface ModelStatus {
   version: number;
+  active_version: number;
+  user_version: number;
+  bundled_version: number;
+  user_package_complete: boolean;
+  bundled_package_complete: boolean;
   user_model_dir: string;
+  user_active_model_dir: string;
+  bundled_model_dir: string;
   sources: Record<string, 'user' | 'bundled' | 'missing'>;
   manifest_url: string;
 }
@@ -22,11 +29,16 @@ export interface CheckUpdateResult {
 }
 
 export interface ApplyUpdateResult {
+  running: boolean;
+  phase: string;
   ok: boolean;
-  version?: number;
-  applied?: string[];
   message: string;
+  percent: number;
+  logs: string[];
+  updated_at: number;
 }
+
+export type ModelUpdateStatus = ApplyUpdateResult;
 
 export async function getModelStatus(): Promise<ModelStatus> {
   const r = await fetch(`${BASE}/model/status`);
@@ -44,4 +56,10 @@ export async function applyModelUpdate(): Promise<ApplyUpdateResult> {
   const r = await fetch(`${BASE}/model/apply-update`, { method: 'POST' });
   if (!r.ok) throw new Error(`应用更新返回 ${r.status}`);
   return (await r.json()) as ApplyUpdateResult;
+}
+
+export async function getModelUpdateStatus(): Promise<ModelUpdateStatus> {
+  const r = await fetch(`${BASE}/model/update-status`);
+  if (!r.ok) throw new Error(`更新进度返回 ${r.status}`);
+  return (await r.json()) as ModelUpdateStatus;
 }

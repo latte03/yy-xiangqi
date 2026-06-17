@@ -144,17 +144,46 @@
 ### 更新策略（2026-06-17，打包前已敲定）
 - **整包更新**：Tauri 2 updater 插件 + GitHub Releases（前后端代码变动走这条）。需更新签名密钥，macOS 另需代码签名/公证。Tauri 接入阶段配。
 - **仅模型更新（in-app，走 GitHub Releases）**：模型当数据资产发布，App 内下载，不发整包。
-  - 发布侧：建模型 Release（如 tag `models-vN`），挂 `piece_classifier.onnx`、`board_locator.onnx`、`models.json`(版本号+各文件 url+sha256)。
-  - 加载策略：**用户数据目录（appData/models）优先 → 回退打包内置**。内置模型永远在，离线/下载失败都能用。
-  - 更新流程：拉 manifest → 比本地版本 → 下载 onnx → **校验 sha256 + onnxruntime 试加载** 通过才替换 + 热重载；任一步失败保留旧模型，不会变砖。
-  - 写入位置用平台标准用户数据目录（可被 env `XIANGQI_MODEL_DIR` 覆盖）；manifest 地址可被 env `XIANGQI_MODELS_MANIFEST` 覆盖。
-  - 实现：`recognizer/model_store.py`（路径解析/版本）；`/model/status`、`/model/check-update`、`/model/apply-update`；前端「检查模型更新」入口（对所有用户开放，属推理侧）。
+  - 发布侧：建模型 Release（如 tag `models-vN`），**每个 Release 固定完整包含两个 ONNX**：
+    `piece_classifier.onnx`、`board_locator.onnx`、`models.json`(版本号+各文件 url+sha256)。
+    暂不支持只发单个模型，避免局部版本/半包状态复杂化。
+  - 加载策略：用户数据目录和内置目录都用 `version.json {"version": N}` 记录整包模型版本；
+    **只有用户目录版本高于内置版本且两个 ONNX 都齐全时，才优先用户模型**，否则回退打包内置。
+    整包升级带来的新内置模型不会被旧下载模型遮住。
+    下载模型按 `appData/models/packages/<version>/` 存完整版本目录，`version.json` 指向当前版本目录，
+    避免更新中断时出现半替换/混合模型包。
+  - 更新流程：拉 manifest → 比当前 active 版本 → 下载两个 onnx → **校验 sha256 + onnxruntime 试加载 + 输入/输出 shape 契约校验**
+    通过才替换 + 热重载；任一步失败保留旧模型，不会变砖。
+  - 写入位置用平台标准用户数据目录（可被 env `XIANGQI_MODEL_DIR` 覆盖）；
+    manifest 地址通过打包时注入 `XIANGQI_MODELS_MANIFEST`，不在源码里写死真实 Release 地址。
+  - 实现：`recognizer/model_store.py`（路径解析/版本）；`/model/status`、`/model/check-update`、
+    `/model/apply-update`、`/model/update-status`；前端「检查模型更新」入口（对所有用户开放，属推理侧），
+    下载/校验/应用过程显示真实进度条。
+- **Tauri 接入（2026-06-17 已落基础壳）**：
+  - `src-tauri/` 使用 Tauri 2；Rust 启动时尝试拉起 PyInstaller sidecar `binaries/recognizer`。
+  - 普通 `pnpm tauri:build` 不强制 sidecar；正式整包更新构建走
+    `pnpm tauri:build:release` + `src-tauri/tauri.release.conf.json`，该 overlay 开启 updater artifacts、
+    配置 updater endpoint/pubkey，并强制带入 `externalBin`。
+  - updater Release 用 Tauri `latest.json` + 签名产物；真实 `pubkey` 和 GitHub Release endpoint 发布前替换。
+- **GitHub Actions 发布（2026-06-17 已落工作流）**：
+  - 固定 tag 策略，避免 App Release 和 Model Release 抢 GitHub `/releases/latest`：
+    App updater 固定读 `app-latest/latest.json`；模型更新固定读 `models-latest/models.json`。
+  - `.github/workflows/ci.yml`：PR/push 跑前端 typecheck + Vitest、后端 Python 测试、Tauri cargo check。
+  - `.github/workflows/release-models.yml`：手动输入 `version`、两个 ONNX 下载 URL，生成 `models.json`/`version.json`，
+    并上传到 `models-latest` Release。
+  - `.github/workflows/release-app.yml`：手动输入 App 版本，从 `models-latest` 下载两个 ONNX 内置进 PyInstaller sidecar，
+    再用 `tauri-apps/tauri-action` 构建 macOS arm64、macOS x64、Windows x64、Linux x64 并上传到 `app-latest`。
+  - GitHub 需配置：repo variable `TAURI_UPDATER_PUBKEY`；repo secrets `TAURI_PRIVATE_KEY`、`TAURI_KEY_PASSWORD`。
+    macOS Developer ID 签名/公证、Windows 代码签名还未接入，后续拿到证书后再补。
 
 ### 下一步
 - [ ] 本机训练定位 CNN，产出 `models/board_locator.onnx` 并在真实 screenshot_1..4 上验证四角精度。
-- [ ] 桌面打包：PyInstaller 打后端为 sidecar（含 models/ 两个 onnx），接入 Tauri 2；
+- [ ] 桌面打包：PyInstaller 打后端为 sidecar（含 models/ 两个 onnx + `version.json`），接入 Tauri 2；
       打包构建保持 `VITE_ENABLE_TRAINING` 未设（训练入口不进分发包）。
-- [ ] Tauri updater（整包）+ 模型 Release 的 `models.json` 填真实仓库地址。
+- [ ] Tauri updater（整包）填真实 pubkey/endpoint；模型 Release 的 `models.json` 由发布流程生成，
+      `XIANGQI_MODELS_MANIFEST` 通过打包环境注入。
+- [ ] 配置 GitHub Actions secrets/vars；首次发布顺序：先 `release-models` 上传 `models-latest`，
+      再 `release-app` 构建 `app-latest`。
 - [ ] （可选）sidecar 冷启动过渡态、窗口最小尺寸/记忆等桌面化打磨。
 
 ## 待办 / 待确认

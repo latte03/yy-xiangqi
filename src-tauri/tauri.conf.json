@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "燕云象棋残局",
+  "version": "0.1.0",
+  "identifier": "com.yanyun.xiangqi-endgame",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "燕云象棋残局",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 980,
+        "minHeight": 680
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}

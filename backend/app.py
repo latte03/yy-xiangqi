@@ -68,6 +68,16 @@ class TrainingStatusOut(BaseModel):
     updated_at: float = 0
 
 
+class ModelUpdateStatusOut(BaseModel):
+    running: bool = False
+    phase: str = "idle"
+    ok: bool = True
+    message: str = ""
+    percent: int = 0
+    logs: List[str] = []
+    updated_at: float = 0
+
+
 class GenerateDataIn(BaseModel):
     per_class: int = 1000
     val_frac: float = 0.15
@@ -116,11 +126,28 @@ _training_status = {
     "updated_at": 0.0,
 }
 
+_model_update_lock = threading.Lock()
+_model_update_status = {
+    "running": False,
+    "phase": "idle",
+    "ok": True,
+    "message": "",
+    "percent": 0,
+    "logs": [],
+    "updated_at": 0.0,
+}
+
 
 def _set_training_status(**kwargs) -> None:
     with _training_lock:
         _training_status.update(kwargs)
         _training_status["updated_at"] = time.time()
+
+
+def _set_model_update_status(**kwargs) -> None:
+    with _model_update_lock:
+        _model_update_status.update(kwargs)
+        _model_update_status["updated_at"] = time.time()
 
 
 def _append_training_log(line: str) -> None:
@@ -129,6 +156,24 @@ def _append_training_log(line: str) -> None:
         logs.append(line.rstrip())
         _training_status["logs"] = logs[-MAX_LOG_LINES:]
         _training_status["updated_at"] = time.time()
+
+
+def _append_model_update_log(line: str) -> None:
+    with _model_update_lock:
+        logs = list(_model_update_status.get("logs", []))
+        logs.append(line.rstrip())
+        _model_update_status["logs"] = logs[-MAX_LOG_LINES:]
+        _model_update_status["updated_at"] = time.time()
+
+
+def _model_update_progress(message: str, percent: Optional[int] = None, phase: Optional[str] = None) -> None:
+    updates = {"message": message}
+    if percent is not None:
+        updates["percent"] = max(0, min(100, int(percent)))
+    if phase is not None:
+        updates["phase"] = phase
+    _set_model_update_status(**updates)
+    _append_model_update_log(message)
 
 
 def _python_cmd(script: str, *args: str) -> list[str]:
@@ -166,6 +211,28 @@ def _run_command_job(phase: str, cmd: list[str]) -> None:
     with _training_lock:
         if _training_status.get("running"):
             raise RuntimeError("已有训练任务正在运行，请等待完成。")
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _run_model_update_job() -> None:
+    def worker() -> None:
+        _set_model_update_status(running=True, phase="checking", ok=True, message="准备检查模型更新…", percent=1, logs=[])
+        try:
+            res = model_update.apply_update(progress=_model_update_progress)
+            _set_model_update_status(
+                running=False,
+                phase="done" if res.get("ok") else "failed",
+                ok=bool(res.get("ok")),
+                message=str(res.get("message") or ""),
+                percent=100 if res.get("ok") else int(_model_update_status.get("percent", 0)),
+            )
+        except Exception as exc:
+            _append_model_update_log(str(exc))
+            _set_model_update_status(running=False, phase="failed", ok=False, message=str(exc))
+
+    with _model_update_lock:
+        if _model_update_status.get("running"):
+            raise RuntimeError("已有模型更新任务正在运行。")
     threading.Thread(target=worker, daemon=True).start()
 
 
@@ -377,10 +444,21 @@ def model_check_update():
     return info
 
 
-@app.post("/model/apply-update")
+@app.get("/model/update-status", response_model=ModelUpdateStatusOut)
+def model_update_status():
+    """模型下载/应用进度。"""
+    with _model_update_lock:
+        return ModelUpdateStatusOut(**_model_update_status)
+
+
+@app.post("/model/apply-update", response_model=ModelUpdateStatusOut)
 def model_apply_update():
-    """下载并应用模型更新（校验 sha256 + 试加载，通过才热替换）。"""
-    return model_update.apply_update(progress=_append_training_log)
+    """后台下载并应用模型更新（校验 sha256 + 试加载，通过才热替换）。"""
+    try:
+        _run_model_update_job()
+    except RuntimeError as exc:
+        return ModelUpdateStatusOut(running=True, phase="busy", ok=False, message=str(exc))
+    return model_update_status()
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ import {
   NAlert,
   NSelect,
   NModal,
+  NProgress,
 } from 'naive-ui';
 import RecognizeCorners from './RecognizeCorners.vue';
 import type { Position, Color, PieceType } from '@/types';
@@ -29,7 +30,8 @@ import { useEditorStore } from '@/stores/editor';
 import { useGameStore } from '@/stores/game';
 import { toFen } from '@/engine/fen';
 import { recognizeImage, checkBackend } from '@/utils/recognize-api';
-import { checkModelUpdate, applyModelUpdate } from '@/utils/model-update-api';
+import { checkModelUpdate, applyModelUpdate, getModelUpdateStatus } from '@/utils/model-update-api';
+import type { ModelUpdateStatus } from '@/utils/model-update-api';
 import {
   addPiece,
   drawBoardLayer,
@@ -217,6 +219,7 @@ watch(
 onBeforeUnmount(() => {
   stage?.destroy();
   window.removeEventListener('paste', onPaste);
+  stopModelUpdatePolling();
 });
 
 function selectFromPalette(type: PieceType, color: Color) {
@@ -374,11 +377,44 @@ async function runRecognize(corners?: string) {
 const modelUpdating = ref(false);
 const modelUpdateMsg = ref('');
 const hasModelUpdate = ref(false);
+const modelUpdatePercent = ref(0);
+let modelUpdatePoll: number | null = null;
+
+function applyModelUpdateStatus(status: ModelUpdateStatus) {
+  modelUpdating.value = status.running;
+  modelUpdatePercent.value = status.percent;
+  modelUpdateMsg.value = status.message;
+  if (!status.running) {
+    stopModelUpdatePolling();
+    if (status.ok) hasModelUpdate.value = false;
+  }
+}
+
+function stopModelUpdatePolling() {
+  if (modelUpdatePoll !== null) {
+    window.clearInterval(modelUpdatePoll);
+    modelUpdatePoll = null;
+  }
+}
+
+function startModelUpdatePolling() {
+  stopModelUpdatePolling();
+  modelUpdatePoll = window.setInterval(async () => {
+    try {
+      applyModelUpdateStatus(await getModelUpdateStatus());
+    } catch (err) {
+      stopModelUpdatePolling();
+      modelUpdating.value = false;
+      modelUpdateMsg.value = err instanceof Error ? err.message : '获取更新进度失败。';
+    }
+  }, 700);
+}
 
 async function onCheckModelUpdate() {
   modelUpdating.value = true;
   modelUpdateMsg.value = '';
   hasModelUpdate.value = false;
+  modelUpdatePercent.value = 0;
   try {
     const res = await checkModelUpdate();
     hasModelUpdate.value = !!res.has_update;
@@ -392,15 +428,18 @@ async function onCheckModelUpdate() {
 
 async function onApplyModelUpdate() {
   modelUpdating.value = true;
+  modelUpdatePercent.value = 1;
   modelUpdateMsg.value = '下载并应用中…';
   try {
-    const res = await applyModelUpdate();
-    modelUpdateMsg.value = res.message;
-    if (res.ok) hasModelUpdate.value = false;
+    const status = await applyModelUpdate();
+    applyModelUpdateStatus(status);
+    if (status.running) startModelUpdatePolling();
   } catch (err) {
     modelUpdateMsg.value = err instanceof Error ? err.message : '更新失败。';
-  } finally {
+    modelUpdatePercent.value = 0;
     modelUpdating.value = false;
+  } finally {
+    if (!modelUpdatePoll) modelUpdating.value = false;
   }
 }
 
@@ -497,6 +536,16 @@ function clearAll() {
               下载并更新
             </NButton>
           </div>
+          <NProgress
+            v-if="modelUpdatePercent > 0"
+            type="line"
+            :percentage="modelUpdatePercent"
+            :processing="modelUpdating"
+            :height="8"
+            :border-radius="4"
+            :fill-border-radius="4"
+            class="model-update-progress"
+          />
           <p v-if="modelUpdateMsg" class="palette-hint">{{ modelUpdateMsg }}</p>
         </NSpace>
       </NCard>
@@ -708,6 +757,9 @@ function clearAll() {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+.model-update-progress {
+  max-width: 260px;
 }
 .ok-msg {
   color: #27ae60;

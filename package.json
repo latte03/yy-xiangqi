@@ -1,13 +1,18 @@
 {
-  "name": "xiangqi-endgame",
+  "name": "yy-xiangqi",
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.2.2",
   "description": "Custom-endgame xiangqi player vs AI (Web)",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:release": "tauri build --config src-tauri/tauri.release.conf.json",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
@@ -17,6 +22,10 @@
     "format": "prettier --write \"src/**/*.{ts,vue,css}\""
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "fairy-stockfish-nnue.wasm": "^1.1.11",
     "konva": "^10.3.0",
     "naive-ui": "^2.44.1",
@@ -25,6 +34,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^25.9.3",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",

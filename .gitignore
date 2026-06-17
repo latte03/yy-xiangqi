@@ -35,4 +35,9 @@ backend/locate_labels
 *.sln
 *.sw?
 
-output
+output/*
+docs/samples/*
+
+# Tauri build output
+src-tauri/target
+src-tauri/gen
