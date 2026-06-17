@@ -41,9 +41,46 @@ function readVersion() {
 
 function replaceTomlVersion(file, version) {
   const text = read(file);
-  const next = text.replace(/^version = ".+"/m, `version = "${version}"`);
-  if (next === text) throw new Error(`Could not find version field in ${file}`);
+  let inPackage = false;
+  let replaced = false;
+  const next = text
+    .split('\n')
+    .map((line) => {
+      if (/^\s*\[package\]\s*$/.test(line)) {
+        inPackage = true;
+        return line;
+      }
+      if (/^\s*\[.+\]\s*$/.test(line)) {
+        inPackage = false;
+      }
+      if (inPackage && /^\s*version\s*=\s*".*"\s*$/.test(line)) {
+        replaced = true;
+        const indent = line.match(/^\s*/)?.[0] ?? '';
+        return `${indent}version = "${version}"`;
+      }
+      return line;
+    })
+    .join('\n');
+  if (!replaced) throw new Error(`Could not find [package] version field in ${file}`);
   write(file, next);
+}
+
+function readTomlPackageVersion(file) {
+  let inPackage = false;
+  for (const line of read(file).split('\n')) {
+    if (/^\s*\[package\]\s*$/.test(line)) {
+      inPackage = true;
+      continue;
+    }
+    if (/^\s*\[.+\]\s*$/.test(line)) {
+      inPackage = false;
+    }
+    if (inPackage) {
+      const match = line.match(/^\s*version\s*=\s*"(.+)"\s*$/);
+      if (match) return match[1];
+    }
+  }
+  return '';
 }
 
 function currentVersions() {
@@ -51,7 +88,7 @@ function currentVersions() {
     versionFile: read('VERSION').trim(),
     packageJson: readJson('package.json').version,
     tauriConfig: readJson('src-tauri/tauri.conf.json').version,
-    cargoToml: read('src-tauri/Cargo.toml').match(/^version = "(.+)"/m)?.[1] ?? '',
+    cargoToml: readTomlPackageVersion('src-tauri/Cargo.toml'),
   };
 }
 

@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:build:release": "tauri build --config src-tauri/tauri.release.conf.json",
+    "tauri:build:release": "scripts/build-release-local.sh",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
     "typecheck": "vue-tsc --noEmit",

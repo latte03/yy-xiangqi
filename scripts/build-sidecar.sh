@@ -3,6 +3,7 @@ set -euo pipefail
 
 target="${1:?target triple is required}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python_bin="${PYTHON:-python3}"
 
 if [[ ! -f "$root/backend/models/piece_classifier.onnx" || ! -f "$root/backend/models/board_locator.onnx" ]]; then
   echo "backend/models must contain piece_classifier.onnx and board_locator.onnx before building the sidecar." >&2
@@ -17,7 +18,7 @@ if [[ "$RUNNER_OS" == "Windows" ]]; then
   sep=";"
 fi
 
-python -m PyInstaller \
+"$python_bin" -m PyInstaller \
   --noconfirm \
   --clean \
   --onefile \

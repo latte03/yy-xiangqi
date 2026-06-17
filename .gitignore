@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.env.release.local
+scripts/local-release-env.sh
 
 # Python backend
 backend/.venv
