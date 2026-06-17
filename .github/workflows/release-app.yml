@@ -85,19 +85,24 @@ jobs:
           python -m pip install -r backend/requirements.txt pyinstaller
 
       - name: Download bundled model package
+        if: inputs.model_tag != ''
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p backend/models
-          gh release download "${{ inputs.model_tag }}" \
-            --repo "${{ github.repository }}" \
-            --pattern piece_classifier.onnx \
-            --pattern board_locator.onnx \
-            --pattern models.json \
-            --pattern version.json \
-            --dir backend/models \
-            --clobber
+          if gh release view "${{ inputs.model_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release download "${{ inputs.model_tag }}" \
+              --repo "${{ github.repository }}" \
+              --pattern piece_classifier.onnx \
+              --pattern board_locator.onnx \
+              --pattern models.json \
+              --pattern version.json \
+              --dir backend/models \
+              --clobber
+          else
+            echo "Model release '${{ inputs.model_tag }}' does not exist; using committed backend/models files."
+          fi
 
       - name: Prepare Tauri release config
         shell: bash

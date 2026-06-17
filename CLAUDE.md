@@ -170,11 +170,16 @@
     App updater 固定读 `app-latest/latest.json`；模型更新固定读 `models-latest/models.json`。
   - `.github/workflows/ci.yml`：PR/push 跑前端 typecheck + Vitest、后端 Python 测试、Tauri cargo check。
   - `.github/workflows/release-models.yml`：手动输入 `version`、两个 ONNX 下载 URL，生成 `models.json`/`version.json`，
-    并上传到 `models-latest` Release。
+    并上传到 `models-latest` Release。ONNX 已允许进 Git，因此下载 URL 可留空，默认使用仓库里的 `backend/models/*.onnx`。
   - `.github/workflows/release-app.yml`：手动输入 App 版本，从 `models-latest` 下载两个 ONNX 内置进 PyInstaller sidecar，
     再用 `tauri-apps/tauri-action` 构建 macOS arm64、macOS x64、Windows x64、Linux x64 并上传到 `app-latest`。
+    若 `models-latest` 尚不存在，则直接使用 Git 中的 `backend/models` 作为内置模型。
   - GitHub 需配置：repo variable `TAURI_UPDATER_PUBKEY`；repo secrets `TAURI_PRIVATE_KEY`、`TAURI_KEY_PASSWORD`。
     macOS Developer ID 签名/公证、Windows 代码签名还未接入，后续拿到证书后再补。
+- **模型入 Git 约定（2026-06-17）**：
+  - 允许追踪发布基线：`backend/models/*.onnx`、`labels.txt`、`version.json`、`README.md`。
+  - 继续忽略训练 checkpoint / 临时发布产物：`*.pt`、`models.json`、dataset、crops、locate_dataset 等。
+  - `version.json` 是内置模型包版本；当内置版本高于用户下载版本时，整包内置模型优先生效。
 
 ### 下一步
 - [ ] 本机训练定位 CNN，产出 `models/board_locator.onnx` 并在真实 screenshot_1..4 上验证四角精度。

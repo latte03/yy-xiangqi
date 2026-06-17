@@ -7,11 +7,13 @@ on:
         description: Numeric model package version, for example 3
         required: true
       piece_url:
-        description: HTTPS URL to piece_classifier.onnx
-        required: true
+        description: Optional HTTPS URL to piece_classifier.onnx; leave empty to use backend/models
+        required: false
+        default: ""
       locator_url:
-        description: HTTPS URL to board_locator.onnx
-        required: true
+        description: Optional HTTPS URL to board_locator.onnx; leave empty to use backend/models
+        required: false
+        default: ""
       tag:
         description: Stable model release tag used by the app
         required: true
@@ -38,7 +40,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Download ONNX assets
+        if: inputs.piece_url != '' || inputs.locator_url != ''
         run: |
+          if [[ -z "${{ inputs.piece_url }}" || -z "${{ inputs.locator_url }}" ]]; then
+            echo "piece_url and locator_url must either both be set or both be empty." >&2
+            exit 1
+          fi
           mkdir -p backend/models
           curl --fail --location --retry 3 --output backend/models/piece_classifier.onnx "${{ inputs.piece_url }}"
           curl --fail --location --retry 3 --output backend/models/board_locator.onnx "${{ inputs.locator_url }}"

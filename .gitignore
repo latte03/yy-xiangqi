@@ -19,7 +19,11 @@ backend/**/__pycache__
 backend/**/*.pyc
 backend/dataset
 backend/crops
-backend/models
+backend/models/*
+!backend/models/*.onnx
+!backend/models/labels.txt
+!backend/models/version.json
+!backend/models/README.md
 backend/uploads
 backend/locate_dataset
 backend/locate_labels
