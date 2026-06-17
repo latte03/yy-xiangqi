@@ -38,6 +38,12 @@ pnpm tauri:build:release
 PYTHON=backend/.venv/bin/python pnpm tauri:build:release
 ```
 
+指定的 Python 环境需要先安装后端依赖和 PyInstaller：
+
+```bash
+backend/.venv/bin/python -m pip install -r backend/requirements.txt pyinstaller
+```
+
 release 构建会生成 updater artifacts，因此还需要先配置下方的 Tauri updater signing key 环境变量。
 
 本地推荐复制模板：

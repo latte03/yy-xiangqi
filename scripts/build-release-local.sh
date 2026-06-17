@@ -19,6 +19,10 @@ if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
   exit 1
 fi
 
+if [[ -z "${XIANGQI_MODELS_MANIFEST:-}" ]]; then
+  export XIANGQI_MODELS_MANIFEST="https://github.com/latte03/yy-xiangqi/releases/download/models-latest/models.json"
+fi
+
 node "$root/scripts/prepare-tauri-release.mjs" \
   --app-endpoint="$app_endpoint" \
   --pubkey="$pubkey"
