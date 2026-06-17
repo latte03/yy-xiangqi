@@ -40,7 +40,7 @@ export const useGameStore = defineStore('game', () => {
 
   const settings = ref<Settings>({
     difficulty: 'medium',
-    side: 'human-red',
+    side: 'ai-red',
   });
 
   // 走子前的局面快照栈，用于「悔棋/撤销」（镜像对弈纠错兜底）

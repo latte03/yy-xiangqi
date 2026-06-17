@@ -24,14 +24,18 @@
 }
 
 html {
+  height: 100%;
   min-height: 100%;
+  overflow: hidden;
   scroll-behavior: smooth;
 }
 
 body {
   min-width: 320px;
+  height: 100dvh;
   min-height: 100dvh;
   margin: 0;
+  overflow: hidden;
   background:
     radial-gradient(circle at 18% 8%, rgba(184, 100, 59, 0.24), transparent 34rem),
     radial-gradient(circle at 85% 18%, rgba(210, 170, 112, 0.13), transparent 30rem),
@@ -94,7 +98,9 @@ code {
 }
 
 #app {
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
 }
 
 .n-statistic .n-statistic-value {

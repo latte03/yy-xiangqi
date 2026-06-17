@@ -15,8 +15,9 @@
         "title": "燕云象棋残局",
         "width": 1180,
         "height": 780,
-        "minWidth": 980,
-        "minHeight": 680
+        "minWidth": 1120,
+        "minHeight": 680,
+        "decorations": false
       }
     ]
   },

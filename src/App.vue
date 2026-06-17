@@ -30,6 +30,7 @@ import { endReasonLabel, endSummary, winnerLabel } from './utils/end-state';
 
 const game = useGameStore();
 const ui = useUiStore();
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 // 启动加载遮罩：探测本地识别后端 sidecar 是否就绪（冷启动有 1-3s）
 const booting = ref(true);
@@ -259,8 +260,8 @@ const difficultyOptions = [
 ];
 
 const sideOptions = [
-  { label: '玩家执红，AI 执黑', value: 'human-red' },
   { label: '玩家执黑，AI 执红', value: 'ai-red' },
+  { label: '玩家执红，AI 执黑', value: 'human-red' },
 ];
 
 const entryTitle = computed(() => {
@@ -290,8 +291,11 @@ const movePairs = computed(() => game.moves.map((move, index) => ({
 const resultReasonLabel = computed(() => endReasonLabel(game.endResult));
 const resultWinnerLabel = computed(() => winnerLabel(game.endResult?.winner));
 const resultSummary = computed(() => endSummary(game.endResult));
+const editorFen = computed(() => ui.contextText);
+const fenCopied = shallowRef(false);
 
 let checkNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+let fenCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
 function flashCheckNotice() {
   if (checkNoticeTimer) {
@@ -310,6 +314,57 @@ function hideCheckNotice() {
     checkNoticeTimer = null;
   }
   showCheckNotice.value = false;
+}
+
+function markFenCopied() {
+  if (fenCopiedTimer) clearTimeout(fenCopiedTimer);
+  fenCopied.value = true;
+  fenCopiedTimer = setTimeout(() => {
+    fenCopied.value = false;
+    fenCopiedTimer = null;
+  }, 1400);
+}
+
+async function copyEditorFen() {
+  if (!editorFen.value) return;
+  try {
+    await navigator.clipboard.writeText(editorFen.value);
+    markFenCopied();
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = editorFen.value;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+    markFenCopied();
+  }
+}
+
+async function withAppWindow(action: 'close' | 'minimize' | 'toggleMaximize' | 'startDragging') {
+  if (!isTauri) return;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const appWindow = getCurrentWindow();
+  await appWindow[action]();
+}
+
+function closeWindow() {
+  void withAppWindow('close');
+}
+
+function minimizeWindow() {
+  void withAppWindow('minimize');
+}
+
+function toggleWindowMaximize() {
+  void withAppWindow('toggleMaximize');
+}
+
+function startWindowDrag(event: MouseEvent) {
+  if ((event.target as HTMLElement | null)?.closest('button, .n-button')) return;
+  void withAppWindow('startDragging');
 }
 
 function cancelAiIfAvailable() {
@@ -379,6 +434,10 @@ watch(
 
 onBeforeUnmount(() => {
   hideCheckNotice();
+  if (fenCopiedTimer) {
+    clearTimeout(fenCopiedTimer);
+    fenCopiedTimer = null;
+  }
 });
 </script>
 
@@ -386,18 +445,19 @@ onBeforeUnmount(() => {
   <NConfigProvider :theme="darkTheme" :theme-overrides="naiveThemeOverrides">
    <NMessageProvider :max="3" placement="top">
     <div class="app-shell">
-      <header class="topbar">
-        <button class="brand" type="button" @click="goHome">
-          <span class="brand-mark">象</span>
-          <span>
-            <strong>残局工坊</strong>
-            <small>xiangqi lab</small>
-          </span>
-        </button>
-
-        <div v-if="screen !== 'home'" class="topbar-actions">
-          <NTag :bordered="false" type="warning">{{ entryTitle }}</NTag>
-          <NButton size="small" secondary @click="goHome">返回入口</NButton>
+      <header class="titlebar" data-tauri-drag-region @mousedown="startWindowDrag">
+        <div v-if="isTauri" class="window-controls">
+          <button class="window-control close" type="button" aria-label="关闭窗口" @click="closeWindow" />
+          <button class="window-control minimize" type="button" aria-label="最小化窗口" @click="minimizeWindow" />
+          <button class="window-control maximize" type="button" aria-label="缩放窗口" @click="toggleWindowMaximize" />
+        </div>
+        <div class="titlebar-drag" data-tauri-drag-region />
+        <div class="titlebar-actions">
+          <NButton v-if="screen !== 'editor'" size="small" type="primary" secondary @click="openCustomEditor">
+            自定义残局
+          </NButton>
+          <NTag v-else :bordered="false" type="warning">自定义残局</NTag>
+          <NButton v-if="screen !== 'home'" size="small" secondary @click="goHome">返回入口</NButton>
         </div>
       </header>
 
@@ -459,12 +519,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-else-if="screen === 'editor'" class="editor-screen">
-          <div class="section-heading">
-            <p class="eyebrow">setup board</p>
-            <h1>摆棋工坊</h1>
-            <p>放置或删除棋子，检查合法性后进入对战。</p>
-          </div>
+        <section v-else-if="screen === 'editor'" class="editor-screen workbench-screen">
           <Editor @submitted="onCustomSubmitted" />
         </section>
 
@@ -553,7 +608,16 @@ onBeforeUnmount(() => {
           {{ backendLabel }}
         </span>
         <span v-if="screen === 'editor' && ui.cursorText" class="status-item">光标：{{ ui.cursorText }}</span>
+        <button
+          v-if="screen === 'editor' && editorFen"
+          class="status-copy"
+          type="button"
+          @click="copyEditorFen"
+        >
+          {{ fenCopied ? '已复制 FEN' : '复制 FEN' }}
+        </button>
         <span class="status-spacer" />
+        <span v-if="screen === 'editor' && editorFen" class="status-item mono">{{ editorFen }}</span>
         <span v-if="screen === 'play'" class="status-item mono">{{ game.fen }}</span>
       </footer>
     </div>
@@ -567,9 +631,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-shell {
-  min-height: 90dvh;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
   color: #f6ead4;
-  padding-bottom: 30px; /* 给底部固定状态栏留位 */
 }
 
 /* 底部状态栏 */
@@ -603,6 +668,21 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   max-width: 52vw;
 }
+.status-copy {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid rgba(236, 202, 142, 0.22);
+  border-radius: 6px;
+  background: rgba(255, 244, 214, 0.06);
+  color: #d8c4a2;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 18px;
+}
+.status-copy:hover {
+  border-color: rgba(236, 202, 142, 0.42);
+  color: #f6ead4;
+}
 .status-spacer {
   flex: 1;
 }
@@ -625,63 +705,63 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-.topbar {
-  width: min(1240px, calc(100vw - 40px));
+.titlebar {
+  width: min(1560px, calc(100vw - 40px));
   margin: 0 auto;
-  padding: 24px 0 10px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
-.brand {
-  display: inline-flex;
+.window-controls {
+  display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  width: 13px;
+  height: 13px;
   padding: 0;
   border: 0;
-  background: transparent;
-  color: inherit;
+  border-radius: 50%;
   cursor: pointer;
-  text-align: left;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 
-.brand-mark {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #bd7041, #ecd097);
-  color: #351b0e;
-  font-family: "Songti SC", serif;
-  font-size: 28px;
-  font-weight: 800;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+.window-control.close {
+  background: #ff5f57;
 }
 
-.brand strong {
-  display: block;
-  font-size: 17px;
-  letter-spacing: 0;
+.window-control.minimize {
+  background: #febc2e;
 }
 
-.brand small {
-  display: block;
-  margin-top: 2px;
-  color: #ac9b80;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.window-control.maximize {
+  background: #28c840;
 }
 
-.topbar-actions,
+.window-control:hover {
+  filter: brightness(1.08);
+}
+
+.titlebar-drag {
+  flex: 1;
+  align-self: stretch;
+}
+
+.titlebar-actions,
 .match-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  -webkit-app-region: no-drag;
 }
 
 .resign-button {
@@ -692,16 +772,23 @@ onBeforeUnmount(() => {
 }
 
 .main-stage {
-  width: min(1240px, calc(100vw - 40px));
+  width: min(1560px, calc(100vw - 40px));
+  height: calc(100dvh - 44px - 28px);
   margin: 0 auto;
-  padding: 28px 0 54px;
+  padding: 10px 0;
+  overflow: hidden;
 }
 
 .entry-screen {
   display: grid;
-  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
   gap: 22px;
-  padding-top: 8px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  text-align: center;
 }
 
 .entry-copy,
@@ -734,7 +821,7 @@ h1 {
 
 h2 {
   color: #fff0d3;
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.1;
   letter-spacing: 0;
 }
@@ -744,23 +831,26 @@ h2 {
   margin-top: 16px;
   max-width: 620px;
   color: #bba88a;
-  font-size: 17px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 .entry-grid {
+  width: min(960px, 100%);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 14px;
+  align-content: start;
+  text-align: left;
 }
 
 .entry-card {
   position: relative;
-  min-height: 330px;
-  padding: 28px;
+  min-height: 250px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   border: 1px solid rgba(236, 202, 142, 0.18);
   border-radius: 18px;
   background:
@@ -833,11 +923,24 @@ h2 {
 .editor-screen {
   display: grid;
   gap: 24px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.workbench-screen {
+  gap: 14px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .play-screen {
   display: grid;
   gap: 18px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .table-header {
@@ -1010,18 +1113,8 @@ h2 {
   color: #8d7b62;
 }
 
-.fen-panel {
-  color: #bca78a;
-}
-
-.fen-panel code {
-  display: block;
-  margin-top: 10px;
-  white-space: normal;
-  word-break: break-all;
-}
-
 @media (max-width: 980px) {
+  .entry-screen,
   .entry-grid,
   .play-layout {
     grid-template-columns: 1fr;
@@ -1033,15 +1126,20 @@ h2 {
 }
 
 @media (max-width: 680px) {
-  .topbar,
+  .titlebar,
   .main-stage {
     width: min(100vw - 24px, 1240px);
   }
 
-  .topbar,
+  .titlebar,
   .table-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .titlebar {
+    height: auto;
+    padding: 10px 0 0;
   }
 
   .entry-settings,
