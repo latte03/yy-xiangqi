@@ -130,3 +130,75 @@ def auto_detect_corners(img: np.ndarray) -> Optional[np.ndarray]:
             best_area = area
             best = quad
     return order_corners(best) if best is not None else None
+
+
+# ---------------- 学习式定位 (关键点 CNN, 截图+翻拍统一) ----------------
+
+from .locate_model import decode_corners, preprocess_locate  # noqa: E402
+from .model_store import resolve_model  # noqa: E402
+
+
+class CnnLocator:
+    """棋盘四角定位 CNN (onnxruntime)。无模型/加载失败时 ready=False。"""
+
+    def __init__(self, model_path: Optional[str] = None):
+        if model_path is None:
+            model_path = resolve_model("board_locator.onnx")  # 每次构造重新解析，支持热更新
+        self.session = None
+        self.input_name = None
+        self.model_path = model_path
+        self.error = ""
+        if not os.path.isfile(model_path):
+            self.error = f"未找到定位模型: {model_path}"
+            return
+        try:
+            import onnxruntime as ort
+
+            so = ort.SessionOptions()
+            so.log_severity_level = 3
+            self.session = ort.InferenceSession(model_path, sess_options=so, providers=["CPUExecutionProvider"])
+            self.input_name = self.session.get_inputs()[0].name
+        except Exception as exc:  # pragma: no cover
+            self.session = None
+            self.error = f"定位模型加载失败: {exc}"
+
+    @property
+    def ready(self) -> bool:
+        return self.session is not None
+
+    def detect(self, img: np.ndarray) -> Optional[np.ndarray]:
+        if self.session is None:
+            return None
+        x, params = preprocess_locate(img)
+        pred = self.session.run(None, {self.input_name: x[None, :, :, :]})[0][0]
+        corners = decode_corners(pred, params)
+        return order_corners(corners)
+
+
+_locator: Optional[CnnLocator] = None
+
+
+def get_locator() -> CnnLocator:
+    global _locator
+    if _locator is None:
+        _locator = CnnLocator()
+    return _locator
+
+
+def reset_locator() -> None:
+    """清缓存，下次 get_locator 重新加载（模型热更新后调用）。"""
+    global _locator
+    _locator = None
+
+
+def locate_corners(img: np.ndarray) -> Optional[np.ndarray]:
+    """
+    统一定位入口：优先用定位 CNN (鲁棒，覆盖截图+翻拍)，
+    模型缺失/未就绪时回退经典轮廓检测。都失败返回 None (前端手动框选兜底)。
+    """
+    loc = get_locator()
+    if loc.ready:
+        c = loc.detect(img)
+        if c is not None:
+            return c
+    return auto_detect_corners(img)

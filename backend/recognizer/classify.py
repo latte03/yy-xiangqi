@@ -18,9 +18,11 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
-from .model_io import MODEL_PATH_DEFAULT, TYPES, preprocess_gray
+from .model_io import TYPES, preprocess_gray
+from .model_store import resolve_model
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", MODEL_PATH_DEFAULT)
+# 用户更新目录优先 → 回退打包内置（见 model_store）
+MODEL_PATH = resolve_model("piece_classifier.onnx")
 
 
 # ---------- 1. 判空 ----------
@@ -73,7 +75,9 @@ def detect_color(crop: np.ndarray) -> str:
 class OnnxClassifier:
     """小型 CNN 类型分类器 (onnxruntime)。"""
 
-    def __init__(self, model_path: str = MODEL_PATH):
+    def __init__(self, model_path: Optional[str] = None):
+        if model_path is None:
+            model_path = resolve_model("piece_classifier.onnx")  # 每次构造重新解析，支持热更新
         self.session = None
         self.input_name = None
         self.model_path = model_path

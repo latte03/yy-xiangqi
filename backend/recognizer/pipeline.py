@@ -17,7 +17,7 @@ import numpy as np
 
 from .classify import build_classifier, classify_cell
 from .fen import FILES, RANKS, board_to_fen, empty_board
-from .locate import auto_detect_corners, warp_to_canonical
+from .locate import locate_corners, warp_to_canonical
 from .slice import slice_cells
 
 
@@ -52,6 +52,12 @@ def get_classifier():
     return _classifier
 
 
+def reset_classifier():
+    """清缓存，下次 get_classifier 重新加载（模型热更新后调用）。"""
+    global _classifier
+    _classifier = None
+
+
 def recognize(
     img: np.ndarray,
     corners: Optional[np.ndarray] = None,
@@ -67,7 +73,7 @@ def recognize(
         )
 
     if corners is None:
-        corners = auto_detect_corners(img)
+        corners = locate_corners(img)
     if corners is None:
         return RecognizeResult(
             ok=False,

@@ -24,7 +24,11 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import json
+
 from recognizer.pipeline import get_classifier, recognize
+from recognizer.locate import get_locator
+from recognizer import model_store, model_update
 
 app = FastAPI(title="xiangqi-endgame recognizer", version="0.1.0")
 
@@ -82,8 +86,24 @@ class CheckModelIn(BaseModel):
     split: str = "val"
 
 
+class GenLocateDataIn(BaseModel):
+    num: int = 4000
+    val_frac: float = 0.12
+    photo_frac: float = 0.5
+    clean: bool = True
+    use_real_labels: bool = True
+
+
+class TrainLocatorIn(BaseModel):
+    epochs: int = 40
+    batch: int = 64
+    lr: float = 1e-3
+    export_only: bool = False
+
+
 ROOT = os.path.dirname(__file__)
 UPLOAD_DIR = os.path.join(ROOT, "uploads")
+LOCATE_LABELS_DIR = os.path.join(ROOT, "locate_labels")
 MAX_LOG_LINES = 240
 
 _training_lock = threading.Lock()
@@ -152,10 +172,12 @@ def _run_command_job(phase: str, cmd: list[str]) -> None:
 @app.get("/health")
 def health():
     clf = get_classifier()
+    loc = get_locator()
     return {
         "status": "ok",
         "model_ready": clf.ready,
         "model_path": getattr(clf, "model_path", ""),
+        "locator_ready": loc.ready,  # 定位 CNN 是否就绪 (否则回退经典/手动框选)
         "message": "" if clf.ready else getattr(clf, "error", "CNN 模型未就绪。"),
     }
 
@@ -224,11 +246,29 @@ async def training_extract_crops(
     cmd = _python_cmd("extract_crops.py", image_path, fen)
     if corners:
         cmd.extend(["--corners", corners])
+        # 同一张「图+四角」也作为定位 CNN 的真实标注存档 (一举两得)
+        _save_locate_label(image_path, corners)
     try:
         _run_command_job("extract-crops", cmd)
     except RuntimeError as exc:
         return TrainingStatusOut(running=True, phase="busy", ok=False, message=str(exc))
     return training_status()
+
+
+def _save_locate_label(image_path: str, corners: str) -> None:
+    """把手动/已知四角存成定位训练标注 locate_labels/<name>.json。"""
+    try:
+        pts = [[float(v) for v in p.split(",")] for p in corners.split(";")]
+        if len(pts) != 4:
+            return
+        os.makedirs(LOCATE_LABELS_DIR, exist_ok=True)
+        name = os.path.splitext(os.path.basename(image_path))[0]
+        json.dump(
+            {"image": os.path.abspath(image_path), "corners": pts},
+            open(os.path.join(LOCATE_LABELS_DIR, f"{name}.json"), "w", encoding="utf-8"),
+        )
+    except Exception:
+        pass
 
 
 @app.post("/training/generate-data", response_model=TrainingStatusOut)
@@ -281,6 +321,66 @@ def training_check_model(payload: CheckModelIn):
     except RuntimeError as exc:
         return TrainingStatusOut(running=True, phase="busy", ok=False, message=str(exc))
     return training_status()
+
+
+# ---------------- 棋盘四角定位 CNN (截图+翻拍统一) ----------------
+
+@app.post("/training/gen-locate-data", response_model=TrainingStatusOut)
+def training_gen_locate_data(payload: GenLocateDataIn):
+    cmd = _python_cmd(
+        "gen_locate_data.py",
+        "--num", str(payload.num),
+        "--val-frac", str(payload.val_frac),
+        "--photo-frac", str(payload.photo_frac),
+    )
+    if payload.clean:
+        cmd.append("--clean")
+    if payload.use_real_labels and os.path.isdir(LOCATE_LABELS_DIR):
+        cmd.extend(["--real-labels", "locate_labels"])
+    try:
+        _run_command_job("gen-locate-data", cmd)
+    except RuntimeError as exc:
+        return TrainingStatusOut(running=True, phase="busy", ok=False, message=str(exc))
+    return training_status()
+
+
+@app.post("/training/train-locator", response_model=TrainingStatusOut)
+def training_train_locator(payload: TrainLocatorIn):
+    cmd = _python_cmd(
+        "train_locator.py",
+        "--epochs", str(payload.epochs),
+        "--batch", str(payload.batch),
+        "--lr", str(payload.lr),
+    )
+    if payload.export_only:
+        cmd.append("--export-only")
+    try:
+        _run_command_job("train-locator", cmd)
+    except RuntimeError as exc:
+        return TrainingStatusOut(running=True, phase="busy", ok=False, message=str(exc))
+    return training_status()
+
+
+# ---------------- 软件内模型更新 (走 GitHub Releases) ----------------
+
+@app.get("/model/status")
+def model_status():
+    """当前模型来源（user 已更新 / bundled 内置）+ 版本。"""
+    return model_store.installed_models_info()
+
+
+@app.get("/model/check-update")
+def model_check_update():
+    """拉远端 manifest，对比本地版本。"""
+    info = model_update.check_update()
+    info.pop("manifest", None)  # 不回传完整 manifest
+    return info
+
+
+@app.post("/model/apply-update")
+def model_apply_update():
+    """下载并应用模型更新（校验 sha256 + 试加载，通过才热替换）。"""
+    return model_update.apply_update(progress=_append_training_log)
 
 
 if __name__ == "__main__":
