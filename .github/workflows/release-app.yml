@@ -102,6 +102,7 @@ jobs:
               --pattern board_locator.onnx \
               --pattern models.json \
               --pattern version.json \
+              --pattern labels.txt \
               --dir backend/models \
               --clobber
           else

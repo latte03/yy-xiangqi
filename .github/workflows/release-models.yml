@@ -82,5 +82,6 @@ jobs:
             backend/models/piece_classifier.onnx \
             backend/models/board_locator.onnx \
             backend/models/models.json \
+            backend/models/labels.txt \
             backend/models/version.json \
             --clobber
