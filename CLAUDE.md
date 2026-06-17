@@ -142,6 +142,11 @@
   （桌面端最自然），统一走 `startRecognizeFlow`。typecheck 通过。
 
 ### 更新策略（2026-06-17，打包前已敲定）
+- **版本控制（2026-06-17）**：
+  - App 版本单一来源是根目录 `VERSION`，SemVer 格式；`pnpm version:sync -- --version=x.y.z`
+    同步到 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`。
+  - CI 跑 `pnpm version:check`，防止多处版本号漂移。
+  - 模型版本独立，用 `backend/models/version.json` 的整数版本；App 整包版本和模型包版本不要混用。
 - **整包更新**：Tauri 2 updater 插件 + GitHub Releases（前后端代码变动走这条）。需更新签名密钥，macOS 另需代码签名/公证。Tauri 接入阶段配。
 - **仅模型更新（in-app，走 GitHub Releases）**：模型当数据资产发布，App 内下载，不发整包。
   - 发布侧：建模型 Release（如 tag `models-vN`），**每个 Release 固定完整包含两个 ONNX**：
@@ -175,6 +180,9 @@
     再用 `tauri-apps/tauri-action` 构建 macOS arm64、macOS x64、Windows x64、Linux x64 并上传到 `app-latest`。
     若 `models-latest` 尚不存在，则直接使用 Git 中的 `backend/models` 作为内置模型。
   - GitHub 需配置：repo variable `TAURI_UPDATER_PUBKEY`；repo secrets `TAURI_PRIVATE_KEY`、`TAURI_KEY_PASSWORD`。
+    生成命令：`pnpm tauri signer generate -- -w ~/.tauri/xiangqi-endgame.key`。
+    `TAURI_UPDATER_PUBKEY` 是可公开 public key 内容；`TAURI_PRIVATE_KEY` 是私钥内容，必须长期保存且保密；
+    `TAURI_KEY_PASSWORD` 是生成私钥时设置的密码（无密码可空）。私钥丢失后，已安装用户无法继续接收同一更新信任链下的新版本。
     macOS Developer ID 签名/公证、Windows 代码签名还未接入，后续拿到证书后再补。
 - **模型入 Git 约定（2026-06-17）**：
   - 允许追踪发布基线：`backend/models/*.onnx`、`labels.txt`、`version.json`、`README.md`。
