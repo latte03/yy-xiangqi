@@ -3,7 +3,7 @@
  * 把棋规引擎 + AI 引擎 + UI 状态串起来
  */
 
-import { defineStore } from 'pinia';
+import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref, computed, shallowRef } from 'vue';
 import { INITIAL_FEN, type Color, type EndReason, type Move } from '@/types';
 import { parseFen, toFen, cloneBoard } from '@/engine/fen';
@@ -324,3 +324,8 @@ export const useGameStore = defineStore('game', () => {
     undoMove,
   };
 });
+
+// Pinia 热更新：改 store 后 HMR 即时生效，避免运行中实例缺新字段（如 canUndo）
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useGameStore, import.meta.hot));
+}

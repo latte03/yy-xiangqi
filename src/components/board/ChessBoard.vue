@@ -33,7 +33,9 @@ const endSummary = computed(() => formatEndSummary(game.endResult));
 let stage: Konva.Stage | null = null;
 let boardLayer: Konva.Layer | null = null;
 let pieceLayer: Konva.Layer | null = null;
+let arrowLayer: Konva.Layer | null = null;
 let hintLayer: Konva.Layer | null = null;
+let arrowAnim: Konva.Animation | null = null;
 
 function drawBoard() {
   if (!boardLayer) return;
@@ -77,6 +79,70 @@ function drawPieces() {
     }
   }
   pieceLayer.batchDraw();
+}
+
+/**
+ * 上一步走法箭头 (from→to)：镜像对弈时一眼看清「该走哪」照搬到燕云。
+ * 半透明青色，两端缩进不压住棋子字；入场「生长」动画 + 轻微呼吸提示。
+ */
+function drawArrow() {
+  if (!arrowLayer) return;
+  if (arrowAnim) {
+    arrowAnim.stop();
+    arrowAnim = null;
+  }
+  arrowLayer.destroyChildren();
+  const m = game.lastMove;
+  if (!m) {
+    arrowLayer.batchDraw();
+    return;
+  }
+  const r = CELL_SIZE * 0.39;
+  const x1 = fileX(m.from.file);
+  const y1 = rankY(m.from.rank);
+  const x2 = fileX(m.to.file);
+  const y2 = rankY(m.to.rank);
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const sx = x1 + ux * r * 0.5; // 起点离开起子中心一点
+  const sy = y1 + uy * r * 0.5;
+  const ex = x2 - ux * r * 0.85; // 箭头停在落点前，不盖住棋子字
+  const ey = y2 - uy * r * 0.85;
+
+  const arrow = new Konva.Arrow({
+    points: [sx, sy, sx, sy],
+    stroke: 'rgba(56, 200, 165, 0.95)',
+    fill: 'rgba(56, 200, 165, 0.95)',
+    strokeWidth: 7,
+    pointerLength: 15,
+    pointerWidth: 14,
+    lineCap: 'round',
+    lineJoin: 'round',
+    opacity: 0,
+    shadowColor: '#06251d',
+    shadowBlur: 6,
+    shadowOpacity: 0.45,
+    listening: false,
+  });
+  arrowLayer.add(arrow);
+
+  const growMs = 220;
+  arrowAnim = new Konva.Animation((frame) => {
+    const time = frame?.time ?? 0;
+    if (time < growMs) {
+      const t = time / growMs;
+      const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      arrow.points([sx, sy, sx + (ex - sx) * ease, sy + (ey - sy) * ease]);
+      arrow.opacity(ease * 0.9);
+    } else {
+      arrow.points([sx, sy, ex, ey]);
+      arrow.opacity(0.78 + 0.16 * Math.sin((time - growMs) / 520)); // 轻微呼吸
+    }
+  }, arrowLayer);
+  arrowAnim.start();
 }
 
 function drawHints() {
@@ -163,13 +229,16 @@ onMounted(() => {
   });
   boardLayer = new Konva.Layer();
   pieceLayer = new Konva.Layer();
+  arrowLayer = new Konva.Layer();
   hintLayer = new Konva.Layer();
   stage.add(boardLayer);
   stage.add(pieceLayer);
+  stage.add(arrowLayer);
   stage.add(hintLayer);
   stage.on('click', onBoardClick);
   drawBoard();
   drawPieces();
+  drawArrow();
   drawHints();
 });
 
@@ -177,6 +246,7 @@ watch(
   () => game.board,
   () => {
     drawPieces();
+    drawArrow();
     drawHints();
   },
   { deep: true },
@@ -201,6 +271,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  arrowAnim?.stop();
   stage?.destroy();
 });
 </script>
