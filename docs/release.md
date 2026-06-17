@@ -13,8 +13,8 @@
 首次发布建议顺序：
 
 1. 确认 `backend/models/*.onnx` 和 `backend/models/version.json` 已更新。
-2. 运行 `release-models`，生成并上传 `models.json`。`version` 可留空，默认读取 `backend/models/version.json`。
-3. 运行 `release-app`，构建 Tauri 桌面包。
+2. 运行 `release-models`，生成并上传 `models.json`。模型版本读取 `backend/models/version.json`。
+3. 运行 `release-app`，构建 Tauri 桌面包。App 版本读取根目录 `VERSION`。
 
 ## Tauri Updater Keys
 

@@ -3,10 +3,6 @@ name: release-models
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Optional numeric model package version; leave empty to use backend/models/version.json
-        required: false
-        default: ""
       piece_url:
         description: Optional HTTPS URL to piece_classifier.onnx; leave empty to use backend/models
         required: false
@@ -56,12 +52,7 @@ jobs:
 
       - name: Write manifest
         run: |
-          version_arg=()
-          if [[ -n "${{ inputs.version }}" ]]; then
-            version_arg=(--version="${{ inputs.version }}")
-          fi
           node scripts/write-models-manifest.mjs \
-            "${version_arg[@]}" \
             --repo="${{ github.repository }}" \
             --tag="${{ inputs.tag }}" \
             --dir=backend/models

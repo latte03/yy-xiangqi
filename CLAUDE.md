@@ -44,7 +44,7 @@
 ## 版本与发布约定
 
 - App 版本单一来源：根目录 `VERSION`，SemVer；用 `pnpm version:sync -- --version=x.y.z` 同步到前端/Tauri/Cargo。
-- 模型版本独立：`backend/models/version.json`，整数版本；App 版本和模型版本不要混用。
+- 模型版本独立：`backend/models/version.json`，整数版本；App/model 发布 workflow 都从版本文件读取版本，不提供手动版本输入。
 - 代码变更走 Tauri updater 整包更新；模型变好走 App 内 GitHub Releases 模型更新。
 - 固定 Release tag：App updater 读 `app-latest/latest.json`；模型更新读 `models-latest/models.json`。
 - 模型 Release 是完整双 ONNX 包；不支持只发单个模型，避免半包/兼容性复杂化。

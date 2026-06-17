@@ -3,9 +3,6 @@ name: release-app
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: App version, for example 0.2.0
-        required: true
       app_tag:
         description: Stable app release tag used by the updater
         required: true
@@ -81,6 +78,10 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve app version
+        shell: bash
+        run: echo "APP_VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+
       - name: Install backend packaging dependencies
         shell: bash
         run: |
@@ -111,7 +112,7 @@ jobs:
         shell: bash
         run: |
           node scripts/prepare-tauri-release.mjs \
-            --version="${{ inputs.version }}" \
+            --version="$APP_VERSION" \
             --app-endpoint="$APP_UPDATE_ENDPOINT" \
             --pubkey="${{ vars.TAURI_UPDATER_PUBKEY }}"
 
@@ -125,8 +126,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ inputs.app_tag }}
-          releaseName: "Xiangqi Endgame v${{ inputs.version }}"
-          releaseBody: "Desktop app v${{ inputs.version }}."
+          releaseName: "Xiangqi Endgame v${{ env.APP_VERSION }}"
+          releaseBody: "Desktop app v${{ env.APP_VERSION }}."
           releaseDraft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           args: --config src-tauri/tauri.release.conf.json ${{ matrix.args }}

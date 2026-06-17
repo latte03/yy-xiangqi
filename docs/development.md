@@ -12,7 +12,7 @@
 不要提交训练 checkpoint、dataset、crops 或发布时生成的 `models.json`。
 
 模型版本是整数，记录在 `backend/models/version.json`。App 版本和模型版本是两条线：App 代码更新走整包；模型变好走模型 Release。
-`release-models` 的 `version` 输入可留空，默认读取这里的版本号。
+`release-models` 固定读取这里的版本号，不在 workflow 里手动输入版本。
 
 ## 版本控制
 
