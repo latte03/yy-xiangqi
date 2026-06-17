@@ -20,8 +20,26 @@
       }
     ]
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4M0NBNjc2RDM4NDk2NEIKUldSTGxvVFRkcVk4K0xwbFp0SDd2WWZ0NXdKN0pNQmpOYVgvQlBVVDIvS05vd0hZQ3I1QWdlUmsK",
+      "endpoints": [
+        "https://github.com/latte03/yy-xiangqi/releases/download/app-latest/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   }
 }
