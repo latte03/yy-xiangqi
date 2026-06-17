@@ -444,7 +444,7 @@ onBeforeUnmount(() => {
 <template>
   <NConfigProvider :theme="darkTheme" :theme-overrides="naiveThemeOverrides">
    <NMessageProvider :max="3" placement="top">
-    <div class="app-shell">
+    <div class="app-shell" :class="{ 'is-tauri': isTauri }">
       <header class="titlebar" data-tauri-drag-region @mousedown="startWindowDrag">
         <div v-if="isTauri" class="window-controls">
           <button class="window-control close" type="button" aria-label="关闭窗口" @click="closeWindow" />
@@ -620,26 +620,50 @@ onBeforeUnmount(() => {
         <span v-if="screen === 'editor' && editorFen" class="status-item mono">{{ editorFen }}</span>
         <span v-if="screen === 'play'" class="status-item mono">{{ game.fen }}</span>
       </footer>
-    </div>
 
-    <Transition name="splash-fade">
-      <LoadingSplash v-if="booting" />
-    </Transition>
+      <Transition name="splash-fade">
+        <LoadingSplash v-if="booting" />
+      </Transition>
+    </div>
    </NMessageProvider>
   </NConfigProvider>
 </template>
 
 <style scoped>
 .app-shell {
+  position: relative;
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(184, 100, 59, 0.24), transparent 34rem),
+    radial-gradient(circle at 85% 18%, rgba(210, 170, 112, 0.13), transparent 30rem),
+    linear-gradient(140deg, #17110d 0%, var(--page-bg-deep) 62%, #1a100c 100%);
   color: #f6ead4;
+  isolation: isolate;
+}
+
+.app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+}
+
+.app-shell.is-tauri {
+  border-radius: 16px;
 }
 
 /* 底部状态栏 */
 .status-bar {
-  position: fixed;
+  position: absolute;
   left: 0;
   right: 0;
   bottom: 0;

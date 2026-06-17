@@ -34,7 +34,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .splash {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 50;
   display: grid;
