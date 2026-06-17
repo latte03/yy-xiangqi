@@ -23,11 +23,15 @@ import {
   NSelect,
   NModal,
   NProgress,
+  NDropdown,
+  useMessage,
 } from 'naive-ui';
 import RecognizeCorners from './RecognizeCorners.vue';
 import type { Position, Color, PieceType } from '@/types';
+import { opponent } from '@/types';
 import { useEditorStore } from '@/stores/editor';
 import { useGameStore } from '@/stores/game';
+import { useUiStore } from '@/stores/ui';
 import { toFen } from '@/engine/fen';
 import { recognizeImage, checkBackend } from '@/utils/recognize-api';
 import { checkModelUpdate, applyModelUpdate, getModelUpdateStatus } from '@/utils/model-update-api';
@@ -35,6 +39,9 @@ import type { ModelUpdateStatus } from '@/utils/model-update-api';
 import {
   addPiece,
   drawBoardLayer,
+  CELL_SIZE,
+  fileX,
+  rankY,
   FILES,
   HEIGHT,
   PIECE_LABELS_BLACK,
@@ -46,6 +53,8 @@ import {
 
 const editor = useEditorStore();
 const game = useGameStore();
+const ui = useUiStore();
+const message = useMessage();
 
 const emit = defineEmits<{
   (e: 'submitted'): void;
@@ -54,6 +63,7 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLDivElement | null>(null);
 const firstMover = ref<'human' | 'ai'>('ai');
 const selectedCell = ref<Position | null>(null);
+const pasteOnce = ref(false); // 右键「复制」触发的一次性粘贴态
 let stage: Konva.Stage | null = null;
 let pieceLayer: Konva.Layer | null = null;
 let highlightLayer: Konva.Layer | null = null;
@@ -113,7 +123,12 @@ function redrawPieces() {
         if (stage) stage.container().style.cursor = 'grab';
       });
       pieceNode.on('mouseleave', () => {
-        if (stage) stage.container().style.cursor = editor.palette ? 'crosshair' : 'default';
+        if (stage) stage.container().style.cursor = editor.palette ? 'copy' : 'default';
+      });
+      pieceNode.on('contextmenu', (evt) => {
+        evt.evt.preventDefault();
+        evt.cancelBubble = true;
+        openPieceMenu({ file: f, rank: r }, evt.evt as MouseEvent);
       });
       pieceNode.on('dragstart', () => {
         selectedCell.value = { file: f, rank: r };
@@ -147,7 +162,60 @@ function redrawPieces() {
     }
   }
   pieceLayer.batchDraw();
+  renderHighlight();
+}
+
+// ---------- 悬停高亮 + 幽灵棋子 ----------
+const hoverCell = ref<Position | null>(null);
+
+function renderHighlight() {
+  if (!highlightLayer) return;
+  highlightLayer.destroyChildren();
+  const cell = hoverCell.value;
+  if (cell) {
+    const x = fileX(cell.file);
+    const y = rankY(cell.rank);
+    // 交叉点高亮环
+    highlightLayer.add(
+      new Konva.Circle({
+        x,
+        y,
+        radius: CELL_SIZE * 0.46,
+        stroke: 'rgba(244, 194, 93, 0.9)',
+        strokeWidth: 2,
+        dash: [5, 4],
+        listening: false,
+      }),
+    );
+    // 选了调色板棋子且该格为空 → 半透明幽灵棋子预览
+    const empty = !editor.board[cell.rank][cell.file];
+    if (editor.palette && empty) {
+      const ghost = addPiece(highlightLayer, editor.palette, cell.file, cell.rank, false);
+      ghost.opacity(0.45);
+      ghost.listening(false);
+    }
+  }
   highlightLayer.batchDraw();
+}
+
+function onStageMouseMove() {
+  if (!stage) return;
+  const pos = stage.getPointerPosition();
+  if (!pos) return;
+  const cell = screenToCell(pos.x, pos.y);
+  if (cell?.file !== hoverCell.value?.file || cell?.rank !== hoverCell.value?.rank) {
+    hoverCell.value = cell;
+    ui.cursorText = cell ? `${String.fromCharCode(97 + cell.file)}${cell.rank + 1}` : '';
+    renderHighlight();
+  }
+}
+
+function onStageMouseLeave() {
+  if (hoverCell.value) {
+    hoverCell.value = null;
+    ui.cursorText = '';
+    renderHighlight();
+  }
 }
 
 /** Konva 内点击/拖拽事件 */
@@ -165,12 +233,22 @@ function handleCellAction(cell: Position) {
   if (editor.palette) {
     editor.setSquare(cell, editor.palette);
     selectedCell.value = cell;
+    // 右键「复制」是一次性粘贴：放置一枚后退出复制态
+    if (pasteOnce.value) {
+      editor.selectPalettePiece(null);
+      pasteOnce.value = false;
+    }
     return;
   }
 
   const piece = editor.board[cell.rank][cell.file];
   if (piece) {
-    selectedCell.value = cell;
+    // 重复点击已选中的棋子 → 取消选中
+    if (selectedCell.value?.file === cell.file && selectedCell.value?.rank === cell.rank) {
+      selectedCell.value = null;
+    } else {
+      selectedCell.value = cell;
+    }
     redrawPieces();
     return;
   }
@@ -186,6 +264,10 @@ onMounted(() => {
   stage = new Konva.Stage({ container: containerRef.value, width: WIDTH, height: HEIGHT });
   drawBoard();
   stage.on('click', onStageClick);
+  stage.on('mousemove', onStageMouseMove);
+  stage.on('mouseleave', onStageMouseLeave);
+  // 屏蔽棋盘上的浏览器默认右键菜单（改用自定义菜单）
+  containerRef.value.addEventListener('contextmenu', (e) => e.preventDefault());
   // 接受 HTML5 drag (从棋子库)
   containerRef.value.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -224,10 +306,12 @@ onBeforeUnmount(() => {
 
 function selectFromPalette(type: PieceType, color: Color) {
   editor.selectPalettePiece({ type, color });
+  pasteOnce.value = false; // 棋子库选中是「可连续放置」的粘性态
 }
 
 function clearPalette() {
   editor.selectPalettePiece(null);
+  pasteOnce.value = false;
 }
 
 function deleteSelectedPiece() {
@@ -239,6 +323,81 @@ function deleteSelectedPiece() {
 function clearSelection() {
   selectedCell.value = null;
   redrawPieces();
+}
+
+// ---------- 棋子右键菜单 ----------
+const contextMenu = ref<{ show: boolean; x: number; y: number; cell: Position | null }>({
+  show: false,
+  x: 0,
+  y: 0,
+  cell: null,
+});
+
+function pieceLabel(pos: Position): string {
+  const p = editor.board[pos.rank][pos.file];
+  if (!p) return '';
+  const name = p.color === 'red' ? PIECE_LABELS_RED[p.type] : PIECE_LABELS_BLACK[p.type];
+  return `${p.color === 'red' ? '红' : '黑'}${name}`;
+}
+
+const contextMenuOptions = computed(() => {
+  const cell = contextMenu.value.cell;
+  if (!cell) return [];
+  const isSelected = selectedCell.value?.file === cell.file && selectedCell.value?.rank === cell.rank;
+  return [
+    { label: `${pieceLabel(cell)}`, key: 'header', disabled: true },
+    { type: 'divider', key: 'd0' },
+    { label: isSelected ? '取消选中' : '选中', key: 'toggle-select' },
+    { label: '复制（再点空格放置）', key: 'copy' },
+    { label: '翻转红黑', key: 'flip' },
+    { type: 'divider', key: 'd1' },
+    { label: '删除', key: 'delete' },
+  ];
+});
+
+/** 在棋子上右键 → 打开菜单 */
+function openPieceMenu(cell: Position, evt: MouseEvent) {
+  evt.preventDefault();
+  selectedCell.value = cell;
+  redrawPieces();
+  contextMenu.value = { show: false, x: evt.clientX, y: evt.clientY, cell };
+  // 先关再开，确保 NDropdown 重新定位
+  void Promise.resolve().then(() => {
+    contextMenu.value.show = true;
+  });
+}
+
+function closeContextMenu() {
+  contextMenu.value.show = false;
+}
+
+function onContextMenuSelect(key: string) {
+  const cell = contextMenu.value.cell;
+  contextMenu.value.show = false;
+  if (!cell) return;
+  const piece = editor.board[cell.rank][cell.file];
+  if (!piece) return;
+  switch (key) {
+    case 'toggle-select':
+      selectedCell.value =
+        selectedCell.value?.file === cell.file && selectedCell.value?.rank === cell.rank ? null : cell;
+      redrawPieces();
+      break;
+    case 'copy':
+      // 复用调色板机制，但标记为「一次性」：下一次点空格放置一枚副本后自动退出
+      editor.selectPalettePiece({ type: piece.type, color: piece.color });
+      pasteOnce.value = true;
+      break;
+    case 'flip':
+      editor.setSquare(cell, { type: piece.type, color: opponent(piece.color) });
+      break;
+    case 'delete':
+      editor.deletePiece(cell);
+      if (selectedCell.value?.file === cell.file && selectedCell.value?.rank === cell.rank) {
+        selectedCell.value = null;
+      }
+      break;
+  }
 }
 
 function submitToGame() {
@@ -260,27 +419,22 @@ function submitToGame() {
 // ---------- 截图识别 ----------
 const recognizeInput = ref<HTMLInputElement | null>(null);
 const recognizing = ref(false);
-const recognizeMsg = ref<string>('');
-const recognizeError = ref<string>('');
 const reviewCount = ref(0); // 需人工复核的格子数
 const pendingFile = ref<File | null>(null); // 待识别的截图
 const showCornerPicker = ref(false); // 框选四角弹窗
 const cornerModalEntered = ref(false);
 
 function pickScreenshot() {
-  recognizeError.value = '';
   recognizeInput.value?.click();
 }
 
 /** 统一入口：选文件 / 粘贴 / 拖拽 都走这里 → 打开框选四角弹窗 */
 function startRecognizeFlow(file: File) {
   if (!file.type.startsWith('image/')) {
-    recognizeError.value = '请提供图片（截图）文件。';
+    message.error('请提供图片（截图）文件。');
     return;
   }
   pendingFile.value = file;
-  recognizeMsg.value = '';
-  recognizeError.value = '';
   cornerModalEntered.value = false;
   showCornerPicker.value = true;
 }
@@ -338,36 +492,34 @@ async function runRecognize(corners?: string) {
   if (!file) return;
   showCornerPicker.value = false;
   recognizing.value = true;
-  recognizeMsg.value = '';
-  recognizeError.value = '';
   reviewCount.value = 0;
   try {
     const health = await checkBackend();
     if (!health.online) {
-      recognizeError.value = '识别服务未启动。请先运行本地后端 (backend/)，详见 backend/README.md。';
+      message.error('识别服务未启动。请先运行本地后端（backend/），详见 backend/README.md。');
       return;
     }
     if (!health.modelReady) {
-      recognizeError.value =
-        health.message || 'CNN 模型未就绪。请先训练并放置 backend/models/piece_classifier.onnx。';
+      message.error(health.message || 'CNN 模型未就绪。请先训练并放置 backend/models/piece_classifier.onnx。');
       return;
     }
     const res = await recognizeImage(file, { side: starterSide.value, corners });
     if (!res.ok) {
-      recognizeError.value =
-        (res.message || '识别失败') + '。可重新上传并手动框选四角再试。';
+      message.error((res.message || '识别失败') + '。可重新上传并手动框选四角再试。');
       return;
     }
     editor.loadFen(res.fen);
     reviewCount.value = res.low_confidence?.length ?? 0;
-    recognizeMsg.value =
+    const text =
       `识别完成，已填入 ${res.cells.length} 个子。` +
       (reviewCount.value > 0
         ? `其中 ${reviewCount.value} 个置信较低，请在棋盘上核对纠正。`
         : '请核对无误后提交。') +
       (res.message ? `（${res.message}）` : '');
+    if (reviewCount.value > 0) message.warning(text);
+    else message.success(text);
   } catch (err) {
-    recognizeError.value = err instanceof Error ? err.message : '识别请求出错。';
+    message.error(err instanceof Error ? err.message : '识别请求出错。');
   } finally {
     recognizing.value = false;
   }
@@ -470,7 +622,18 @@ function clearAll() {
     <div class="board-section">
       <NCard title="编辑棋盘" size="small">
         <div ref="containerRef" class="board-canvas"
+             :class="{ 'has-palette': !!editor.palette }"
              :style="{ width: WIDTH + 'px', height: HEIGHT + 'px' }" />
+        <NDropdown
+          trigger="manual"
+          placement="bottom-start"
+          :show="contextMenu.show"
+          :x="contextMenu.x"
+          :y="contextMenu.y"
+          :options="contextMenuOptions"
+          @select="onContextMenuSelect"
+          @clickoutside="closeContextMenu"
+        />
         <div class="board-actions">
           <NSpace class="action-buttons">
             <NButton size="small" @click="loadInitialLayout">加载初始局面</NButton>
@@ -525,10 +688,6 @@ function clearAll() {
             <span v-else>点击上传 · 拖拽图片到此 · 或直接粘贴截图（Ctrl/Cmd+V）</span>
           </div>
           <p class="palette-hint">支持自动定位或手动框选四角；识别后可在棋盘上手动拖动纠正。</p>
-          <NAlert v-if="recognizeError" type="error" :show-icon="false">{{ recognizeError }}</NAlert>
-          <NAlert v-else-if="recognizeMsg" :type="reviewCount > 0 ? 'warning' : 'success'" :show-icon="false">
-            {{ recognizeMsg }}
-          </NAlert>
 
           <div class="model-update-row">
             <NButton size="tiny" :loading="modelUpdating" @click="onCheckModelUpdate">检查模型更新</NButton>
@@ -670,7 +829,10 @@ function clearAll() {
 .board-canvas {
   border: 2px solid #5a3e1b;
   border-radius: 4px;
-  cursor: crosshair;
+  cursor: default;
+}
+.board-canvas.has-palette {
+  cursor: copy;
 }
 .board-canvas.dragging-piece {
   cursor: grabbing;

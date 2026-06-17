@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import {
   NButton,
   NConfigProvider,
+  NMessageProvider,
   NSelect,
   NStatistic,
   NTag,
@@ -11,7 +12,11 @@ import {
 import type { GlobalThemeOverrides } from 'naive-ui';
 import ChessBoard from './components/board/ChessBoard.vue';
 import Editor from './components/editor/Editor.vue';
+import LoadingSplash from './components/common/LoadingSplash.vue';
 import { useGameStore } from './stores/game';
+import { useUiStore } from './stores/ui';
+import { checkBackend } from './utils/recognize-api';
+import { getModelStatus } from './utils/model-update-api';
 
 // 训练工作台仅维护者/开发构建可见；分发给终端用户的构建不含训练入口。
 // 开发环境 (vite dev) 默认开启；其它构建需显式设 VITE_ENABLE_TRAINING=true。
@@ -24,6 +29,40 @@ const Training = TRAINING_ENABLED
 import { endReasonLabel, endSummary, winnerLabel } from './utils/end-state';
 
 const game = useGameStore();
+const ui = useUiStore();
+
+// 启动加载遮罩：探测本地识别后端 sidecar 是否就绪（冷启动有 1-3s）
+const booting = ref(true);
+
+async function probeBackend(retries = 8): Promise<void> {
+  for (let i = 0; i < retries; i++) {
+    const health = await checkBackend();
+    if (health.online) {
+      let version: number | null = null;
+      try {
+        version = (await getModelStatus()).active_version ?? null;
+      } catch {
+        version = null;
+      }
+      ui.setBackend(true, health.modelReady, version);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  ui.setBackend(false, false, null);
+}
+
+onMounted(async () => {
+  const minSplash = new Promise((r) => setTimeout(r, 900)); // 至少展示一会，避免闪一下
+  await Promise.all([probeBackend(), minSplash]);
+  booting.value = false;
+});
+
+const backendLabel = computed(() => {
+  if (!ui.backendOnline) return '识别服务：离线';
+  if (!ui.modelReady) return '识别服务：在线（模型未就绪）';
+  return `识别服务：在线${ui.modelVersion != null ? ` · 模型 v${ui.modelVersion}` : ''}`;
+});
 
 type Screen = 'home' | 'editor' | 'play' | 'training';
 type Entry = 'standard' | 'custom';
@@ -345,6 +384,7 @@ onBeforeUnmount(() => {
 
 <template>
   <NConfigProvider :theme="darkTheme" :theme-overrides="naiveThemeOverrides">
+   <NMessageProvider :max="3" placement="top">
     <div class="app-shell">
       <header class="topbar">
         <button class="brand" type="button" @click="goHome">
@@ -508,7 +548,22 @@ onBeforeUnmount(() => {
           <span>将军</span>
         </div>
       </Transition>
+
+      <footer class="status-bar">
+        <span class="status-item">
+          <i class="dot" :class="{ on: ui.backendOnline, warn: ui.backendOnline && !ui.modelReady }" />
+          {{ backendLabel }}
+        </span>
+        <span v-if="screen === 'editor' && ui.cursorText" class="status-item">光标：{{ ui.cursorText }}</span>
+        <span class="status-spacer" />
+        <span v-if="screen === 'play'" class="status-item mono">{{ game.fen }}</span>
+      </footer>
     </div>
+
+    <Transition name="splash-fade">
+      <LoadingSplash v-if="booting" />
+    </Transition>
+   </NMessageProvider>
   </NConfigProvider>
 </template>
 
@@ -516,6 +571,60 @@ onBeforeUnmount(() => {
 .app-shell {
   min-height: 90dvh;
   color: #f6ead4;
+  padding-bottom: 30px; /* 给底部固定状态栏留位 */
+}
+
+/* 底部状态栏 */
+.status-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  background: rgba(16, 12, 9, 0.96);
+  border-top: 1px solid rgba(236, 202, 142, 0.16);
+  color: #a99472;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.status-item.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52vw;
+}
+.status-spacer {
+  flex: 1;
+}
+.status-bar .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c85f4a;
+}
+.status-bar .dot.on {
+  background: #5fae7a;
+}
+.status-bar .dot.warn {
+  background: #d2aa70;
+}
+.splash-fade-leave-active {
+  transition: opacity 0.35s ease;
+}
+.splash-fade-leave-to {
+  opacity: 0;
 }
 
 .topbar {
