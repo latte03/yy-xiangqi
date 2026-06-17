@@ -180,7 +180,7 @@
     再用 `tauri-apps/tauri-action` 构建 macOS arm64、macOS x64、Windows x64、Linux x64 并上传到 `app-latest`。
     若 `models-latest` 尚不存在，则直接使用 Git 中的 `backend/models` 作为内置模型。
   - GitHub 需配置：repo variable `TAURI_UPDATER_PUBKEY`；repo secrets `TAURI_PRIVATE_KEY`、`TAURI_KEY_PASSWORD`。
-    生成命令：`pnpm tauri signer generate -- -w ~/.tauri/xiangqi-endgame.key`。
+    生成命令：`pnpm tauri signer generate --write-keys ~/.tauri/xiangqi-endgame.key`。
     `TAURI_UPDATER_PUBKEY` 是可公开 public key 内容；`TAURI_PRIVATE_KEY` 是私钥内容，必须长期保存且保密；
     `TAURI_KEY_PASSWORD` 是生成私钥时设置的密码（无密码可空）。私钥丢失后，已安装用户无法继续接收同一更新信任链下的新版本。
     macOS Developer ID 签名/公证、Windows 代码签名还未接入，后续拿到证书后再补。

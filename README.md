@@ -103,7 +103,7 @@ Tauri updater 需要一对更新签名密钥。它们只用于验证更新包是
 生成密钥：
 
 ```bash
-pnpm tauri signer generate -- -w ~/.tauri/xiangqi-endgame.key
+pnpm tauri signer generate --write-keys ~/.tauri/xiangqi-endgame.key
 ```
 
 需要配置到 GitHub：
