@@ -410,8 +410,22 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="entry-grid">
-            <article class="entry-card standard-entry">
+            <article class="entry-card custom-entry">
               <span class="entry-number">01</span>
+              <h2>自定义残局</h2>
+              <p>截图导入或手动摆出残局，校验后交给 AI 推演走法。</p>
+              <div class="entry-notes">
+                <span>截图识别布局</span>
+                <span>自动校验将帅</span>
+                <span>撤销重做兜底</span>
+              </div>
+              <NButton type="primary" size="large" block @click="openCustomEditor">
+                进入摆棋工坊
+              </NButton>
+            </article>
+
+            <article class="entry-card standard-entry">
+              <span class="entry-number">02</span>
               <h2>普通对战</h2>
               <p>从标准初始局面开始，按执方设置决定玩家或 AI 执红。</p>
               <div class="entry-settings">
@@ -426,20 +440,6 @@ onBeforeUnmount(() => {
               </div>
               <NButton type="primary" size="large" block @click="startStandardGame">
                 进入普通对战
-              </NButton>
-            </article>
-
-            <article class="entry-card custom-entry">
-              <span class="entry-number">02</span>
-              <h2>自定义残局</h2>
-              <p>先摆棋、校验局面，再选择玩家执方和首手归属。</p>
-              <div class="entry-notes">
-                <span>支持撤销重做</span>
-                <span>自动校验将帅</span>
-                <span>提交后接入 AI</span>
-              </div>
-              <NButton type="primary" size="large" block @click="openCustomEditor">
-                进入摆棋工坊
               </NButton>
             </article>
 
@@ -536,11 +536,6 @@ onBeforeUnmount(() => {
                   </span>
                 </div>
               </section>
-
-              <details class="fen-panel">
-                <summary>FEN</summary>
-                <code>{{ game.fen }}</code>
-              </details>
             </aside>
           </div>
         </section>
@@ -703,10 +698,10 @@ onBeforeUnmount(() => {
 }
 
 .entry-screen {
-  min-height: calc(100dvh - 170px);
   display: grid;
-  align-content: center;
-  gap: 34px;
+  align-content: start;
+  gap: 22px;
+  padding-top: 8px;
 }
 
 .entry-copy,
@@ -731,8 +726,8 @@ p {
 
 h1 {
   color: #fff5df;
-  font-size: clamp(36px, 6vw, 72px);
-  line-height: 0.96;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.02;
   letter-spacing: 0;
   text-wrap: balance;
 }
@@ -853,14 +848,14 @@ h2 {
 }
 
 .table-header h1 {
-  font-size: clamp(32px, 4vw, 52px);
+  font-size: clamp(26px, 3vw, 40px);
 }
 
 .play-layout {
   display: grid;
   grid-template-columns: minmax(540px, auto) minmax(300px, 360px);
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .board-panel,
@@ -886,8 +881,17 @@ h2 {
 
 .match-panel {
   padding: 18px;
-  display: grid;
-  gap: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.move-log {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .stats-grid {
@@ -982,7 +986,11 @@ h2 {
 .moves {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .move,
