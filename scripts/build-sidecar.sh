@@ -62,6 +62,8 @@ exclude_modules=(
   matplotlib scipy pandas
   tkinter PyQt5 PyQt6 PySide2 PySide6
   IPython notebook pytest
+  # torch 的传递依赖 + 仅训练用，运行时（cv2/numpy/fastapi/onnxruntime）不需要
+  sympy networkx mpmath PIL Pillow
 )
 exclude_args=()
 for m in "${exclude_modules[@]}"; do
