@@ -8,8 +8,11 @@ export const RANKS = 10;
 export const WIDTH = CELL_SIZE * (FILES - 1) + BOARD_PADDING * 2;
 export const HEIGHT = CELL_SIZE * (RANKS - 1) + BOARD_PADDING * 2;
 
-const INK = '#4c2f18';
-const INK_SOFT = 'rgba(76, 47, 24, 0.72)';
+const INK = '#553419';
+const INK_SOFT = 'rgba(85, 52, 25, 0.68)';
+const PIECE_DARK_INK = '#24201b';
+const PIECE_RED_INK = '#a53427';
+const PIECE_FACE = '#e8c37b';
 
 export const PIECE_LABELS_RED: Record<PieceType, string> = {
   K: '帅',
@@ -37,7 +40,7 @@ export function pieceLabel(piece: Piece | null): string {
 }
 
 export function pieceInk(color: Color): string {
-  return color === 'red' ? '#a93628' : '#1f1b17';
+  return color === 'red' ? PIECE_RED_INK : PIECE_DARK_INK;
 }
 
 export function fileX(file: number): number {
@@ -58,54 +61,62 @@ export function screenToCell(x: number, y: number): Position | null {
 export function drawBoardLayer(layer: Konva.Layer): void {
   layer.destroyChildren();
 
+  // 1) 底板：暖木色，柔和圆角与外投影
   layer.add(new Konva.Rect({
     x: 0,
     y: 0,
     width: WIDTH,
     height: HEIGHT,
-    cornerRadius: 18,
+    cornerRadius: 22,
     fillLinearGradientStartPoint: { x: 0, y: 0 },
     fillLinearGradientEndPoint: { x: WIDTH, y: HEIGHT },
-    fillLinearGradientColorStops: [0, '#d7a65d', 0.42, '#f0cf8b', 1, '#b9793c'],
-    shadowColor: '#000',
-    shadowBlur: 28,
-    shadowOpacity: 0.28,
-    shadowOffsetY: 12,
+    fillLinearGradientColorStops: [0, '#d89d57', 0.3, '#f2d293', 0.62, '#cf9a55', 1, '#8b4e21'],
+    shadowColor: '#170b04',
+    shadowBlur: 34,
+    shadowOpacity: 0.4,
+    shadowOffsetY: 16,
   }));
 
-  layer.add(new Konva.Rect({
-    x: 14,
-    y: 14,
-    width: WIDTH - 28,
-    height: HEIGHT - 28,
-    cornerRadius: 12,
-    stroke: 'rgba(76, 47, 24, 0.78)',
-    strokeWidth: 3,
-  }));
-
-  for (let i = 0; i < 24; i++) {
-    const y = 26 + ((i * 41) % (HEIGHT - 52));
+  // 2) 顺纹木纹：竖向细线，安静不抢戏
+  for (let i = 1; i < 13; i++) {
+    const x = 28 + (i * (WIDTH - 56)) / 13;
     layer.add(new Konva.Line({
-      points: [26, y, WIDTH - 26, y + ((i % 5) - 2) * 2],
-      stroke: 'rgba(84, 47, 19, 0.08)',
-      strokeWidth: i % 4 === 0 ? 2 : 1,
-      tension: 0.45,
+      points: [x, 26, x + (((i % 3) - 1) * 2), HEIGHT - 26],
+      stroke: i % 2 === 0 ? 'rgba(120, 68, 28, 0.05)' : 'rgba(255, 246, 214, 0.055)',
+      strokeWidth: 1,
+      listening: false,
     }));
   }
 
+  // 3) 外框：单层深色细边（克制，不堆叠多重边框）
+  layer.add(new Konva.Rect({
+    x: 12,
+    y: 12,
+    width: WIDTH - 24,
+    height: HEIGHT - 24,
+    cornerRadius: 14,
+    stroke: 'rgba(58, 31, 12, 0.7)',
+    strokeWidth: 1.6,
+  }));
+
+  // 4) 楚河汉界 河道带
   layer.add(new Konva.Rect({
     x: fileX(0),
     y: rankY(4),
     width: CELL_SIZE * 8,
     height: CELL_SIZE,
-    fill: 'rgba(255, 238, 183, 0.22)',
+    fillLinearGradientStartPoint: { x: 0, y: rankY(4) },
+    fillLinearGradientEndPoint: { x: 0, y: rankY(5) },
+    fillLinearGradientColorStops: [0, 'rgba(110, 58, 22, 0.04)', 0.5, 'rgba(255, 247, 220, 0.2)', 1, 'rgba(110, 58, 22, 0.04)'],
+    listening: false,
   }));
 
   for (let rank = 0; rank < RANKS; rank++) {
     layer.add(new Konva.Line({
       points: [fileX(0), rankY(rank), fileX(FILES - 1), rankY(rank)],
       stroke: INK,
-      strokeWidth: rank === 0 || rank === RANKS - 1 ? 1.8 : 1.1,
+      strokeWidth: rank === 0 || rank === RANKS - 1 ? 2 : 1.15,
+      lineCap: 'round',
     }));
   }
 
@@ -115,7 +126,8 @@ export function drawBoardLayer(layer: Konva.Layer): void {
       layer.add(new Konva.Line({
         points: [x, rankY(0), x, rankY(RANKS - 1)],
         stroke: INK,
-        strokeWidth: 1.8,
+        strokeWidth: 2,
+        lineCap: 'round',
       }));
       continue;
     }
@@ -124,11 +136,13 @@ export function drawBoardLayer(layer: Konva.Layer): void {
       points: [x, rankY(0), x, rankY(4)],
       stroke: INK,
       strokeWidth: 1.1,
+      lineCap: 'round',
     }));
     layer.add(new Konva.Line({
       points: [x, rankY(5), x, rankY(RANKS - 1)],
       stroke: INK,
       strokeWidth: 1.1,
+      lineCap: 'round',
     }));
   }
 
@@ -138,25 +152,35 @@ export function drawBoardLayer(layer: Konva.Layer): void {
 
   layer.add(new Konva.Text({
     x: fileX(1),
-    y: rankY(4) + 14,
+    y: rankY(4) + 13,
     width: CELL_SIZE * 3,
     align: 'center',
-    text: '楚  河',
-    fontSize: 24,
-    fill: 'rgba(76, 47, 24, 0.58)',
-    fontFamily: 'Georgia, serif',
+    text: '楚   河',
+    fontSize: 27,
+    fill: 'rgba(74, 41, 16, 0.5)',
+    fontFamily: 'Songti SC, STSong, SimSun, serif',
     fontStyle: 'bold',
+    shadowColor: 'rgba(255, 247, 222, 0.6)',
+    shadowBlur: 0,
+    shadowOffsetY: 1,
+    shadowOpacity: 0.6,
+    listening: false,
   }));
   layer.add(new Konva.Text({
     x: fileX(4),
-    y: rankY(4) + 14,
+    y: rankY(4) + 13,
     width: CELL_SIZE * 3,
     align: 'center',
-    text: '汉  界',
-    fontSize: 24,
-    fill: 'rgba(76, 47, 24, 0.58)',
-    fontFamily: 'Georgia, serif',
+    text: '汉   界',
+    fontSize: 27,
+    fill: 'rgba(74, 41, 16, 0.5)',
+    fontFamily: 'Songti SC, STSong, SimSun, serif',
     fontStyle: 'bold',
+    shadowColor: 'rgba(255, 247, 222, 0.6)',
+    shadowBlur: 0,
+    shadowOffsetY: 1,
+    shadowOpacity: 0.6,
+    listening: false,
   }));
 
   for (let file = 0; file < FILES; file++) {
@@ -183,6 +207,116 @@ export function drawBoardLayer(layer: Konva.Layer): void {
   layer.batchDraw();
 }
 
+/** 棋盘上单格棋子的标准半径 */
+export const PIECE_RADIUS = CELL_SIZE * 0.39;
+
+/**
+ * 以 (0,0) 为中心，把一枚棋子的完整造型画进一个 Konva.Group。
+ * 棋盘棋子与候选棋子共用此函数，保证像素级一致。
+ * 字号随半径等比缩放（棋盘半径对应 25px）。
+ */
+export function buildPieceGroup(
+  piece: Piece,
+  radius: number = PIECE_RADIUS,
+  selected = false,
+): Konva.Group {
+  const fontSize = 26 * (radius / PIECE_RADIUS);
+  const group = new Konva.Group();
+
+  // 选中态：棋子外侧的柔和光晕
+  if (selected) {
+    group.add(new Konva.Circle({
+      radius: radius + 2,
+      fill: 'rgba(244, 194, 93, 0.18)',
+      shadowColor: '#f4c85d',
+      shadowBlur: 18,
+      shadowOpacity: 0.85,
+      listening: false,
+    }));
+  }
+
+  // 1) 外盘：温润的木质/金边圆盘，自带接触阴影（取代以往多层同心圆）
+  group.add(new Konva.Circle({
+    radius,
+    fillLinearGradientStartPoint: { x: 0, y: -radius },
+    fillLinearGradientEndPoint: { x: 0, y: radius },
+    fillLinearGradientColorStops: [0, '#f6dca0', 0.5, '#caa055', 1, '#8a5224'],
+    stroke: selected ? '#f4c85d' : '#5d3415',
+    strokeWidth: selected ? Math.max(1.6, radius * 0.07) : Math.max(1, radius * 0.045),
+    shadowColor: '#1c0e05',
+    shadowBlur: selected ? 12 : 8,
+    shadowOpacity: selected ? 0.5 : 0.38,
+    shadowOffsetY: radius * 0.16,
+  }));
+
+  // 2) 棋面：与外盘齐平的平整棋面（不做下沉），均匀的暖木色
+  const faceR = radius * 0.9;
+  group.add(new Konva.Circle({
+    radius: faceR,
+    fillLinearGradientStartPoint: { x: 0, y: -faceR },
+    fillLinearGradientEndPoint: { x: 0, y: faceR },
+    fillLinearGradientColorStops: [0, '#fff3d6', 0.55, PIECE_FACE, 1, '#e0ba75'],
+    listening: false,
+  }));
+
+  // 3) 唯一的装饰刻线：棋面靠外沿的一圈细凹槽
+  group.add(new Konva.Circle({
+    radius: radius * 0.86,
+    stroke: 'rgba(74, 40, 16, 0.5)',
+    strokeWidth: Math.max(0.8, radius * 0.035),
+    listening: false,
+  }));
+
+  // 4) 字：分层描绘出阴刻质感（上深下亮，字像刻进棋面）
+  const label = pieceLabel(piece);
+  const ink = pieceInk(piece.color);
+  const mkText = (dy: number, fill: string) =>
+    new Konva.Text({
+      x: -radius,
+      y: -radius + dy - 1,
+      width: radius * 2,
+      height: radius * 2,
+      align: 'center',
+      verticalAlign: 'middle',
+      text: label,
+      fontSize,
+      fontStyle: 'bold',
+      fill,
+      fontFamily: 'Songti SC, STSong, SimSun, serif',
+      listening: false,
+    });
+  // 上沿内阴影（加深、营造刻痕的上壁）
+  group.add(mkText(-0.7 * (radius / PIECE_RADIUS), 'rgba(48, 26, 10, 0.45)'));
+  // 下沿高光（让刻痕底部反光）
+  group.add(mkText(1.1 * (radius / PIECE_RADIUS), 'rgba(255, 248, 226, 0.6)'));
+  // 主字
+  group.add(mkText(0, ink));
+  return group;
+}
+
+/**
+ * 把一枚独立棋子渲染进给定容器（自带 Konva.Stage）。
+ * 候选棋子库使用，size 为正方形画布边长（px）。
+ * 返回 stage，调用方负责在卸载时 destroy。
+ */
+export function renderStandalonePiece(
+  container: HTMLDivElement,
+  piece: Piece,
+  size: number,
+  selected = false,
+): Konva.Stage {
+  const stage = new Konva.Stage({ container, width: size, height: size });
+  const layer = new Konva.Layer({ listening: false });
+  // 留出阴影/选中环的余量，避免被画布裁切
+  const radius = (size / 2) * 0.78;
+  const group = buildPieceGroup(piece, radius, selected);
+  group.position({ x: size / 2, y: size / 2 });
+  layer.add(group);
+  stage.add(layer);
+  layer.draw();
+  return stage;
+}
+
 export function addPiece(
   layer: Konva.Layer,
   piece: Piece,
@@ -192,45 +326,10 @@ export function addPiece(
 ): Konva.Group {
   const x = fileX(file);
   const y = rankY(rank);
-  const radius = CELL_SIZE * 0.39;
+  const radius = PIECE_RADIUS;
 
-  const group = new Konva.Group({ x, y });
-  group.add(new Konva.Circle({
-    radius: radius + 3,
-    fill: selected ? 'rgba(244, 194, 93, 0.44)' : 'rgba(58, 31, 13, 0.2)',
-    shadowColor: '#2a1609',
-    shadowBlur: selected ? 14 : 8,
-    shadowOpacity: selected ? 0.42 : 0.26,
-    shadowOffsetY: 4,
-  }));
-  group.add(new Konva.Circle({
-    radius,
-    fillRadialGradientStartPoint: { x: -7, y: -9 },
-    fillRadialGradientStartRadius: 2,
-    fillRadialGradientEndPoint: { x: 0, y: 0 },
-    fillRadialGradientEndRadius: radius,
-    fillRadialGradientColorStops: [0, '#fff7df', 0.72, '#efcf8f', 1, '#bd813f'],
-    stroke: selected ? '#f0b844' : '#5a3519',
-    strokeWidth: selected ? 3 : 2,
-  }));
-  group.add(new Konva.Circle({
-    radius: radius - 6,
-    stroke: 'rgba(90, 53, 25, 0.45)',
-    strokeWidth: 1,
-  }));
-  group.add(new Konva.Text({
-    x: -radius,
-    y: -radius,
-    width: radius * 2,
-    height: radius * 2,
-    align: 'center',
-    verticalAlign: 'middle',
-    text: pieceLabel(piece),
-    fontSize: 24,
-    fontStyle: 'bold',
-    fill: pieceInk(piece.color),
-    fontFamily: 'Songti SC, STSong, SimSun, serif',
-  }));
+  const group = buildPieceGroup(piece, radius, selected);
+  group.position({ x, y });
   layer.add(group);
   return group;
 }
