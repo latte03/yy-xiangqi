@@ -1,6 +1,6 @@
 [package]
 name = "xiangqi-endgame"
-version = "0.1.0"
+version = "0.2.0"
 description = "Xiangqi endgame helper"
 authors = ["agan"]
 edition = "2021"

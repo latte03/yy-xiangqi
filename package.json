@@ -1,7 +1,7 @@
 {
   "name": "yy-xiangqi",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "pnpm@11.2.2",
   "description": "Custom-endgame xiangqi player vs AI (Web)",
