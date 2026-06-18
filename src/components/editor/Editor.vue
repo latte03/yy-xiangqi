@@ -14,50 +14,31 @@
 
   import { ref, shallowRef, onMounted, onBeforeUnmount, watch, computed } from 'vue'
   import Konva from 'konva'
-  import {
-    NCard,
-    NSpace,
-    NButton,
-    NTag,
-    NSelect,
-    NModal,
-    NProgress,
-    NDropdown,
-    useMessage
-  } from 'naive-ui'
-  import RecognizeCorners from './RecognizeCorners.vue'
+  import { NCard, NSpace, NButton, NTag, NSelect, NDropdown } from 'naive-ui'
+  import RecognizePanel from './RecognizePanel.vue'
+  import PalettePiece from './PalettePiece.vue'
   import type { Position, Color, PieceType } from '@/types'
   import { opponent } from '@/types'
   import { useEditorStore } from '@/stores/editor'
   import { useGameStore } from '@/stores/game'
   import { useUiStore } from '@/stores/ui'
   import { toFen } from '@/engine/fen'
-  import { recognizeImage, checkBackend } from '@/utils/recognize-api'
-  import {
-    checkModelUpdate,
-    applyModelUpdate,
-    getModelUpdateStatus
-  } from '@/utils/model-update-api'
-  import type { ModelUpdateStatus } from '@/utils/model-update-api'
   import {
     addPiece,
-    drawBoardLayer,
     CELL_SIZE,
     fileX,
     rankY,
-    FILES,
     HEIGHT,
     PIECE_LABELS_BLACK,
     PIECE_LABELS_RED,
-    RANKS,
     screenToCell,
     WIDTH
   } from '@/components/board/board-drawing'
+  import { createBoardStage, paintPieces, type BoardStage } from '@/components/board/use-board-stage'
 
   const editor = useEditorStore()
   const game = useGameStore()
   const ui = useUiStore()
-  const message = useMessage()
 
   const emit = defineEmits<{
     (e: 'submitted'): void
@@ -68,10 +49,15 @@
   const selectedCell = ref<Position | null>(null)
   const pasteOnce = ref(false) // 右键「复制」触发的一次性粘贴态
   let suppressPaletteClick = false
-  let stage: Konva.Stage | null = null
+  let boardStage: BoardStage | null = null
   let pieceLayer: Konva.Layer | null = null
   let highlightLayer: Konva.Layer | null = null
   let suppressNextClick = false
+
+  function setCursor(cursor: string) {
+    const el = boardStage?.stage.container()
+    if (el) el.style.cursor = cursor
+  }
 
   interface PaletteDragState {
     type: PieceType
@@ -86,6 +72,7 @@
   const paletteDrag = shallowRef<PaletteDragState | null>(null)
 
   const PIECE_TYPES: PieceType[] = ['K', 'R', 'C', 'H', 'A', 'E', 'P']
+  const PALETTE_PIECE_SIZE = 50
 
   const playerSideOptions = [
     { label: '玩家执黑，AI 执红', value: 'ai-red' },
@@ -104,12 +91,6 @@
   const submitLabel = computed(() =>
     aiStarts.value ? '开始对战，AI 先走 →' : '开始对战，我方先走 →'
   )
-  const paletteDragLabel = computed(() => {
-    const piece = paletteDrag.value
-    if (!piece) return ''
-    return piece.color === 'red' ? PIECE_LABELS_RED[piece.type] : PIECE_LABELS_BLACK[piece.type]
-  })
-
   const fenPreview = computed(() =>
     toFen({
       board: editor.board,
@@ -119,37 +100,15 @@
     })
   )
 
-  function drawBoard() {
-    if (!stage) return
-    stage.destroyChildren()
-    const bg = new Konva.Layer()
-    stage.add(bg)
-    drawBoardLayer(bg)
-
-    pieceLayer = new Konva.Layer()
-    highlightLayer = new Konva.Layer()
-    stage.add(pieceLayer)
-    stage.add(highlightLayer)
-    redrawPieces()
-  }
-
   function redrawPieces() {
     if (!pieceLayer || !highlightLayer) return
-    pieceLayer.destroyChildren()
-    highlightLayer.destroyChildren()
-    for (let r = 0; r < RANKS; r++) {
-      for (let f = 0; f < FILES; f++) {
-        const p = editor.board[r][f]
-        if (!p) continue
-        const isSelected = selectedCell.value?.file === f && selectedCell.value?.rank === r
-        const pieceNode = addPiece(pieceLayer, p, f, r, isSelected)
+    paintPieces(pieceLayer, editor.board, {
+      isSelected: (f, r) =>
+        selectedCell.value?.file === f && selectedCell.value?.rank === r,
+      onNode: (pieceNode, _piece, f, r) => {
         pieceNode.draggable(true)
-        pieceNode.on('mouseenter', () => {
-          if (stage) stage.container().style.cursor = 'grab'
-        })
-        pieceNode.on('mouseleave', () => {
-          if (stage) stage.container().style.cursor = editor.palette ? 'copy' : 'default'
-        })
+        pieceNode.on('mouseenter', () => setCursor('grab'))
+        pieceNode.on('mouseleave', () => setCursor(editor.palette ? 'copy' : 'default'))
         pieceNode.on('contextmenu', (evt) => {
           evt.evt.preventDefault()
           evt.cancelBubble = true
@@ -158,12 +117,12 @@
         pieceNode.on('dragstart', () => {
           selectedCell.value = { file: f, rank: r }
           pieceNode.moveToTop()
-          if (stage) stage.container().style.cursor = 'grabbing'
+          setCursor('grabbing')
           containerRef.value?.classList.add('dragging-piece')
         })
         pieceNode.on('dragend', () => {
           containerRef.value?.classList.remove('dragging-piece')
-          if (stage) stage.container().style.cursor = 'grab'
+          setCursor('grab')
           suppressNextClick = true
           window.setTimeout(() => {
             suppressNextClick = false
@@ -185,8 +144,7 @@
           editor.movePiece({ file: f, rank: r }, target)
         })
       }
-    }
-    pieceLayer.batchDraw()
+    })
     renderHighlight()
   }
 
@@ -225,10 +183,7 @@
   }
 
   function onStageMouseMove() {
-    if (!stage) return
-    const pos = stage.getPointerPosition()
-    if (!pos) return
-    const cell = screenToCell(pos.x, pos.y)
+    const cell = boardStage?.pointerCell() ?? null
     if (cell?.file !== hoverCell.value?.file || cell?.rank !== hoverCell.value?.rank) {
       hoverCell.value = cell
       ui.cursorText = cell ? `${String.fromCharCode(97 + cell.file)}${cell.rank + 1}` : ''
@@ -245,12 +200,9 @@
   }
 
   /** Konva 内点击/拖拽事件 */
-  function onStageClick(_evt: Konva.KonvaEventObject<MouseEvent>) {
+  function onStageClick() {
     if (suppressNextClick) return
-    if (!stage) return
-    const pos = stage.getPointerPosition()
-    if (!pos) return
-    const cell = screenToCell(pos.x, pos.y)
+    const cell = boardStage?.pointerCell()
     if (!cell) return
     handleCellAction(cell)
   }
@@ -284,14 +236,15 @@
 
   onMounted(() => {
     if (!containerRef.value) return
-    stage = new Konva.Stage({ container: containerRef.value, width: WIDTH, height: HEIGHT })
-    drawBoard()
-    stage.on('click', onStageClick)
-    stage.on('mousemove', onStageMouseMove)
-    stage.on('mouseleave', onStageMouseLeave)
+    boardStage = createBoardStage(containerRef.value)
+    pieceLayer = boardStage.addLayer()
+    highlightLayer = boardStage.addLayer()
+    redrawPieces()
+    boardStage.stage.on('click', onStageClick)
+    boardStage.stage.on('mousemove', onStageMouseMove)
+    boardStage.stage.on('mouseleave', onStageMouseLeave)
     // 屏蔽棋盘上的浏览器默认右键菜单（改用自定义菜单）
     containerRef.value.addEventListener('contextmenu', (e) => e.preventDefault())
-    window.addEventListener('paste', onPaste)
   })
 
   watch(
@@ -303,17 +256,15 @@
   watch(
     fenPreview,
     (fen) => {
-      ui.contextText = fen
+      ui.editorFen = fen
     },
     { immediate: true }
   )
 
   onBeforeUnmount(() => {
-    stage?.destroy()
-    window.removeEventListener('paste', onPaste)
+    boardStage?.destroy()
     removePalettePointerListeners()
-    stopModelUpdatePolling()
-    ui.contextText = ''
+    ui.editorFen = ''
   })
 
   function selectFromPalette(type: PieceType, color: Color) {
@@ -526,200 +477,6 @@
     emit('submitted')
   }
 
-  // ---------- 截图识别 ----------
-  const recognizeInput = ref<HTMLInputElement | null>(null)
-  const recognizing = ref(false)
-  const reviewCount = ref(0) // 需人工复核的格子数
-  const pendingFile = ref<File | null>(null) // 待识别的截图
-  const showCornerPicker = ref(false) // 框选四角弹窗
-  const cornerModalEntered = ref(false)
-
-  function pickScreenshot() {
-    recognizeInput.value?.click()
-  }
-
-  /** 统一入口：选文件 / 粘贴 / 拖拽 都走这里 → 打开框选四角弹窗 */
-  function startRecognizeFlow(file: File) {
-    if (!file.type.startsWith('image/')) {
-      message.error('请提供图片（截图）文件。')
-      return
-    }
-    pendingFile.value = file
-    cornerModalEntered.value = false
-    showCornerPicker.value = true
-  }
-
-  function onScreenshotChosen(e: Event) {
-    const input = e.target as HTMLInputElement
-    const file = input.files?.[0]
-    input.value = '' // 允许重复选同一文件
-    if (file) startRecognizeFlow(file)
-  }
-
-  // 拖拽截图到识别卡片
-  const dragOver = ref(false)
-  function onRecognizeDragOver(e: DragEvent) {
-    if (e.dataTransfer?.types?.includes('Files')) {
-      e.preventDefault()
-      dragOver.value = true
-    }
-  }
-  function onRecognizeDragLeave() {
-    dragOver.value = false
-  }
-  function onRecognizeDrop(e: DragEvent) {
-    dragOver.value = false
-    const file = e.dataTransfer?.files?.[0]
-    if (file) {
-      e.preventDefault()
-      startRecognizeFlow(file)
-    }
-  }
-
-  // 剪贴板粘贴截图 (Ctrl/Cmd+V)：桌面端最自然的导入方式
-  function onPaste(e: ClipboardEvent) {
-    // 正在框选弹窗 / 输入框聚焦时不拦截
-    if (showCornerPicker.value) return
-    const target = e.target as HTMLElement | null
-    if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return
-    const items = e.clipboardData?.items
-    if (!items) return
-    for (const it of items) {
-      if (it.kind === 'file' && it.type.startsWith('image/')) {
-        const file = it.getAsFile()
-        if (file) {
-          e.preventDefault()
-          startRecognizeFlow(file)
-        }
-        return
-      }
-    }
-  }
-
-  /** corners 为空 = 走后端自动定位；非空 = 手动四角 */
-  async function runRecognize(corners?: string) {
-    const file = pendingFile.value
-    if (!file) return
-    showCornerPicker.value = false
-    recognizing.value = true
-    reviewCount.value = 0
-    try {
-      const health = await checkBackend()
-      if (!health.online) {
-        message.error('识别服务未启动。请先运行本地后端（backend/），详见 backend/README.md。')
-        return
-      }
-      if (!health.modelReady) {
-        message.error(
-          health.message || 'CNN 模型未就绪。请先训练并放置 backend/models/piece_classifier.onnx。'
-        )
-        return
-      }
-      const res = await recognizeImage(file, { side: starterSide.value, corners })
-      if (!res.ok) {
-        message.error((res.message || '识别失败') + '。可重新上传并手动框选四角再试。')
-        return
-      }
-      editor.loadFen(res.fen)
-      reviewCount.value = res.low_confidence?.length ?? 0
-      const text =
-        `识别完成，已填入 ${res.cells.length} 个子。` +
-        (reviewCount.value > 0
-          ? `其中 ${reviewCount.value} 个置信较低，请在棋盘上核对纠正。`
-          : '请核对无误后提交。') +
-        (res.message ? `（${res.message}）` : '')
-      if (reviewCount.value > 0) message.warning(text)
-      else message.success(text)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '识别请求出错。')
-    } finally {
-      recognizing.value = false
-    }
-  }
-
-  // ---------- 模型更新（软件内，走 GitHub Releases） ----------
-  const modelUpdating = ref(false)
-  const modelUpdateMsg = ref('')
-  const hasModelUpdate = ref(false)
-  const modelUpdatePercent = ref(0)
-  let modelUpdatePoll: number | null = null
-
-  function applyModelUpdateStatus(status: ModelUpdateStatus) {
-    modelUpdating.value = status.running
-    modelUpdatePercent.value = status.percent
-    modelUpdateMsg.value = status.message
-    if (!status.running) {
-      stopModelUpdatePolling()
-      if (status.ok) hasModelUpdate.value = false
-    }
-  }
-
-  function stopModelUpdatePolling() {
-    if (modelUpdatePoll !== null) {
-      window.clearInterval(modelUpdatePoll)
-      modelUpdatePoll = null
-    }
-  }
-
-  function startModelUpdatePolling() {
-    stopModelUpdatePolling()
-    modelUpdatePoll = window.setInterval(async () => {
-      try {
-        applyModelUpdateStatus(await getModelUpdateStatus())
-      } catch (err) {
-        stopModelUpdatePolling()
-        modelUpdating.value = false
-        modelUpdateMsg.value = err instanceof Error ? err.message : '获取更新进度失败。'
-      }
-    }, 700)
-  }
-
-  async function onCheckModelUpdate() {
-    modelUpdating.value = true
-    modelUpdateMsg.value = ''
-    hasModelUpdate.value = false
-    modelUpdatePercent.value = 0
-    try {
-      const res = await checkModelUpdate()
-      hasModelUpdate.value = !!res.has_update
-      modelUpdateMsg.value =
-        res.message + (res.has_update ? `（v${res.current_version} → v${res.latest_version}）` : '')
-    } catch (err) {
-      modelUpdateMsg.value = err instanceof Error ? err.message : '检查更新失败。'
-    } finally {
-      modelUpdating.value = false
-    }
-  }
-
-  async function onApplyModelUpdate() {
-    modelUpdating.value = true
-    modelUpdatePercent.value = 1
-    modelUpdateMsg.value = '下载并应用中…'
-    try {
-      const status = await applyModelUpdate()
-      applyModelUpdateStatus(status)
-      if (status.running) startModelUpdatePolling()
-    } catch (err) {
-      modelUpdateMsg.value = err instanceof Error ? err.message : '更新失败。'
-      modelUpdatePercent.value = 0
-      modelUpdating.value = false
-    } finally {
-      if (!modelUpdatePoll) modelUpdating.value = false
-    }
-  }
-
-  function onCornerConfirm(corners: string) {
-    runRecognize(corners)
-  }
-  function onCornerAuto() {
-    runRecognize(undefined)
-  }
-  function onCornerCancel() {
-    showCornerPicker.value = false
-    cornerModalEntered.value = false
-    pendingFile.value = null
-  }
-
   function loadInitialLayout() {
     editor.loadInitial()
   }
@@ -735,10 +492,9 @@
     <div
       v-if="paletteDrag"
       class="palette-drag-ghost"
-      :class="paletteDrag.color"
       :style="{ transform: `translate3d(${paletteDrag.x}px, ${paletteDrag.y}px, 0)` }"
     >
-      {{ paletteDragLabel }}
+      <PalettePiece :type="paletteDrag.type" :color="paletteDrag.color" :size="52" />
     </div>
 
     <div class="board-section">
@@ -778,17 +534,23 @@
         </div>
         <div class="board-workspace">
           <div class="palette-strip black">
-            <span class="palette-side black">黑</span>
+            <span class="palette-side black">黑方</span>
             <div class="palette-grid">
               <button
                 v-for="t in PIECE_TYPES"
                 :key="'b-' + t"
-                class="palette-piece black"
+                class="palette-piece"
                 :class="{ active: editor.palette?.type === t && editor.palette?.color === 'black' }"
+                :title="PIECE_LABELS_BLACK[t]"
                 @click="selectFromPalette(t, 'black')"
                 @pointerdown="startPalettePointerDrag($event, t, 'black')"
               >
-                {{ PIECE_LABELS_BLACK[t] }}
+                <PalettePiece
+                  :type="t"
+                  color="black"
+                  :size="PALETTE_PIECE_SIZE"
+                  :selected="editor.palette?.type === t && editor.palette?.color === 'black'"
+                />
               </button>
             </div>
           </div>
@@ -801,17 +563,23 @@
           />
 
           <div class="palette-strip red">
-            <span class="palette-side red">红</span>
+            <span class="palette-side red">红方</span>
             <div class="palette-grid">
               <button
                 v-for="t in PIECE_TYPES"
                 :key="'r-' + t"
-                class="palette-piece red"
+                class="palette-piece"
                 :class="{ active: editor.palette?.type === t && editor.palette?.color === 'red' }"
+                :title="PIECE_LABELS_RED[t]"
                 @click="selectFromPalette(t, 'red')"
                 @pointerdown="startPalettePointerDrag($event, t, 'red')"
               >
-                {{ PIECE_LABELS_RED[t] }}
+                <PalettePiece
+                  :type="t"
+                  color="red"
+                  :size="PALETTE_PIECE_SIZE"
+                  :selected="editor.palette?.type === t && editor.palette?.color === 'red'"
+                />
               </button>
             </div>
           </div>
@@ -831,75 +599,7 @@
     </div>
 
     <div class="palette-section">
-      <NCard title="截图识别（实验）" size="small" style="margin-bottom: 12px">
-        <input
-          ref="recognizeInput"
-          type="file"
-          accept="image/*"
-          style="display: none"
-          @change="onScreenshotChosen"
-        />
-        <NSpace vertical size="small">
-          <div
-            class="drop-zone"
-            :class="{ over: dragOver }"
-            @click="pickScreenshot"
-            @dragover="onRecognizeDragOver"
-            @dragleave="onRecognizeDragLeave"
-            @drop="onRecognizeDrop"
-          >
-            <span v-if="recognizing">识别中…</span>
-            <span v-else>点击上传 · 拖拽图片到此 · 或直接粘贴截图（Ctrl/Cmd+V）</span>
-          </div>
-          <p class="palette-hint">支持自动定位或手动框选四角；识别后可在棋盘上手动拖动纠正。</p>
-
-          <div class="model-update-row">
-            <NButton size="tiny" :loading="modelUpdating" @click="onCheckModelUpdate"
-              >检查模型更新</NButton
-            >
-            <NButton
-              v-if="hasModelUpdate"
-              size="tiny"
-              type="primary"
-              :loading="modelUpdating"
-              @click="onApplyModelUpdate"
-            >
-              下载并更新
-            </NButton>
-          </div>
-          <NProgress
-            v-if="modelUpdatePercent > 0"
-            type="line"
-            :percentage="modelUpdatePercent"
-            :processing="modelUpdating"
-            :height="8"
-            :border-radius="4"
-            :fill-border-radius="4"
-            class="model-update-progress"
-          />
-          <p v-if="modelUpdateMsg" class="palette-hint">{{ modelUpdateMsg }}</p>
-        </NSpace>
-      </NCard>
-
-      <NModal
-        v-model:show="showCornerPicker"
-        preset="card"
-        title="框选棋盘四角"
-        style="width: min(96vw, 1280px); max-height: min(94vh, 920px)"
-        class="corner-modal"
-        :mask-closable="false"
-        @after-enter="cornerModalEntered = true"
-        @before-leave="cornerModalEntered = false"
-      >
-        <RecognizeCorners
-          v-if="pendingFile"
-          :file="pendingFile"
-          :is-enter="cornerModalEntered"
-          @confirm="onCornerConfirm"
-          @auto="onCornerAuto"
-          @cancel="onCornerCancel"
-        />
-      </NModal>
+      <RecognizePanel :side="starterSide" />
 
       <NCard title="校验" size="small" style="margin-top: 12px">
         <div
@@ -981,15 +681,20 @@
   .board-workspace {
     display: grid;
     justify-items: center;
-    gap: 10px;
-    margin: 0 auto;
+    gap: 14px;
+    margin: 14px auto 0;
     width: fit-content;
     max-width: 100%;
   }
   .board-canvas {
-    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(245, 203, 128, 0.32);
+    border-radius: 20px;
     cursor: default;
     max-width: 100%;
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.34),
+      0 0 0 1px rgba(255, 238, 183, 0.08) inset;
   }
   .board-canvas.has-palette {
     cursor: copy;
@@ -1014,123 +719,110 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid rgba(236, 202, 142, 0.18);
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, rgba(255, 244, 214, 0.09), rgba(78, 43, 18, 0.12)),
+      rgba(18, 12, 8, 0.34);
+    box-shadow:
+      0 12px 30px rgba(0, 0, 0, 0.18),
+      0 1px 0 rgba(255, 239, 194, 0.1) inset;
   }
   .palette-side {
     flex: 0 0 auto;
-    width: 22px;
+    width: 1.4em;
     text-align: center;
     font-size: 13px;
     font-weight: 700;
+    letter-spacing: 2px;
+    font-family: "Songti SC", STSong, SimSun, serif;
+    line-height: 1.15;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
   }
   .palette-side.red {
-    color: #c0392b;
+    color: #de7667;
   }
   .palette-side.black {
-    color: #cdb589;
+    color: #d6c09a;
   }
   .palette-grid {
     display: grid;
-    grid-template-columns: repeat(7, 42px);
+    grid-template-columns: repeat(7, 50px);
     justify-content: center;
-    gap: 6px;
+    gap: 9px;
   }
+  /* 候选棋子按钮：仅作交互框架，棋子造型由内部 Konva 画布渲染，
+     从而与棋盘上的棋子保持像素级一致。 */
   .palette-piece {
-    width: 42px;
-    aspect-ratio: 1;
+    position: relative;
+    width: 50px;
+    height: 50px;
     min-width: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
     border-radius: 50%;
-    border: 2px solid #5a3e1b;
-    background: #fff5dc;
-    font-family: serif;
-    font-size: 21px;
-    font-weight: bold;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition:
+      transform 160ms ease,
+      filter 160ms ease;
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 棋子下方的浅凹槽，提示这是一个可取用的棋位 */
+  .palette-piece::before {
+    position: absolute;
+    inset: 3px;
+    content: "";
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 42%, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0) 70%);
+    opacity: 0;
+    transition: opacity 160ms ease;
+    pointer-events: none;
+    z-index: -1;
   }
   .palette-piece:hover {
-    background: #fff;
-    transform: scale(1.05);
+    transform: translateY(-3px);
+    filter: brightness(1.05) drop-shadow(0 6px 10px rgba(20, 10, 4, 0.45));
   }
+  .palette-piece:hover::before {
+    opacity: 1;
+  }
+  .palette-piece:active {
+    transform: translateY(0) scale(0.96);
+  }
+  /* 选中态：Konva 棋子本身已画出金色高亮环，这里再补一圈柔光强调 */
   .palette-piece.active {
-    border-color: #ffd700;
-    box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    filter: drop-shadow(0 0 6px rgba(244, 194, 93, 0.7));
   }
-  .palette-piece.red {
-    color: #c0392b;
+  .palette-piece.active::before {
+    opacity: 1;
+    background: radial-gradient(circle at 50% 50%, rgba(244, 194, 93, 0.28), rgba(244, 194, 93, 0) 72%);
   }
-  .palette-piece.black {
-    color: #1c1c1c;
+  .palette-piece:focus-visible {
+    outline: 2px solid #f4c85d;
+    outline-offset: 2px;
   }
   .palette-drag-ghost {
     position: fixed;
     left: 0;
     top: 0;
     z-index: 80;
-    width: 44px;
-    height: 44px;
-    margin: -22px 0 0 -22px;
-    border: 2px solid #5a3e1b;
-    border-radius: 50%;
-    background: #fff5dc;
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+    width: 52px;
+    height: 52px;
+    margin: -26px 0 0 -26px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: serif;
-    font-size: 21px;
-    font-weight: bold;
+    filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.45));
     pointer-events: none;
     user-select: none;
-  }
-  .palette-drag-ghost.red {
-    color: #c0392b;
-  }
-  .palette-drag-ghost.black {
-    color: #1c1c1c;
-  }
-  .palette-hint {
-    margin: 8px 0 0;
-    font-size: 12px;
-    color: #888;
-  }
-  .drop-zone {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    min-height: 64px;
-    padding: 12px;
-    border: 1.5px dashed rgba(236, 202, 142, 0.4);
-    border-radius: 10px;
-    background: rgba(255, 244, 214, 0.04);
-    color: #c8b48c;
-    font-size: 12.5px;
-    line-height: 1.5;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .drop-zone:hover {
-    border-color: rgba(236, 202, 142, 0.7);
-    background: rgba(255, 244, 214, 0.08);
-  }
-  .drop-zone.over {
-    border-color: #ffd700;
-    background: rgba(255, 215, 0, 0.1);
-    color: #ffe7b1;
-  }
-  .model-update-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
-  }
-  .model-update-progress {
-    max-width: 100%;
   }
   .ok-msg {
     color: #27ae60;
