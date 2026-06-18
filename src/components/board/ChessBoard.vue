@@ -9,18 +9,8 @@ import Konva from 'konva';
 import { useGameStore } from '@/stores/game';
 import { generateLegalMoves } from '@/engine/legal';
 import { endSummary as formatEndSummary } from '@/utils/end-state';
-import {
-  addPiece,
-  CELL_SIZE,
-  drawBoardLayer,
-  FILES,
-  HEIGHT,
-  rankY,
-  fileX,
-  RANKS,
-  screenToCell,
-  WIDTH,
-} from './board-drawing';
+import { CELL_SIZE, FILES, HEIGHT, rankY, fileX, RANKS, WIDTH } from './board-drawing';
+import { createBoardStage, paintPieces, type BoardStage } from './use-board-stage';
 
 const game = useGameStore();
 
@@ -30,28 +20,18 @@ const validTargets = ref<Array<{ file: number; rank: number }>>([]);
 const lastAnimatedMoveCount = ref(0);
 const endSummary = computed(() => formatEndSummary(game.endResult));
 
-let stage: Konva.Stage | null = null;
-let boardLayer: Konva.Layer | null = null;
+let boardStage: BoardStage | null = null;
 let pieceLayer: Konva.Layer | null = null;
 let arrowLayer: Konva.Layer | null = null;
 let hintLayer: Konva.Layer | null = null;
 let arrowAnim: Konva.Animation | null = null;
 
-function drawBoard() {
-  if (!boardLayer) return;
-  drawBoardLayer(boardLayer);
-}
-
 function drawPieces() {
   if (!pieceLayer) return;
-  pieceLayer.destroyChildren();
-  for (let r = 0; r < RANKS; r++) {
-    for (let f = 0; f < FILES; f++) {
-      const p = game.board[r][f];
-      if (!p) continue;
-      const isSelected =
-        selectedFrom.value?.file === f && selectedFrom.value?.rank === r;
-      const pieceNode = addPiece(pieceLayer, p, f, r, isSelected);
+  paintPieces(pieceLayer, game.board, {
+    isSelected: (f, r) =>
+      selectedFrom.value?.file === f && selectedFrom.value?.rank === r,
+    onNode: (node, p, f, r) => {
       const lastMove = game.lastMove;
       const moveCount = game.moves.length;
       const shouldAnimate =
@@ -65,20 +45,19 @@ function drawPieces() {
 
       if (shouldAnimate) {
         lastAnimatedMoveCount.value = moveCount;
-        pieceNode.position({
+        node.position({
           x: fileX(lastMove.from.file),
           y: rankY(lastMove.from.rank),
         });
-        pieceNode.to({
+        node.to({
           x: fileX(f),
           y: rankY(r),
           duration: 0.24,
           easing: Konva.Easings.EaseOut,
         });
       }
-    }
-  }
-  pieceLayer.batchDraw();
+    },
+  });
 }
 
 /**
@@ -179,14 +158,10 @@ function drawHints() {
   hintLayer.batchDraw();
 }
 
-function onBoardClick(evt: Konva.KonvaEventObject<MouseEvent>) {
+function onBoardClick() {
   if (game.aiThinking) return;
   if (game.ended) return;
-  const stage = evt.target.getStage();
-  if (!stage) return;
-  const pos = stage.getPointerPosition();
-  if (!pos) return;
-  const cell = screenToCell(pos.x, pos.y);
+  const cell = boardStage?.pointerCell();
   if (!cell) return;
   const { file: f, rank: r } = cell;
 
@@ -222,21 +197,11 @@ function onBoardClick(evt: Konva.KonvaEventObject<MouseEvent>) {
 
 onMounted(() => {
   if (!containerRef.value) return;
-  stage = new Konva.Stage({
-    container: containerRef.value,
-    width: WIDTH,
-    height: HEIGHT,
-  });
-  boardLayer = new Konva.Layer();
-  pieceLayer = new Konva.Layer();
-  arrowLayer = new Konva.Layer();
-  hintLayer = new Konva.Layer();
-  stage.add(boardLayer);
-  stage.add(pieceLayer);
-  stage.add(arrowLayer);
-  stage.add(hintLayer);
-  stage.on('click', onBoardClick);
-  drawBoard();
+  boardStage = createBoardStage(containerRef.value);
+  pieceLayer = boardStage.addLayer();
+  arrowLayer = boardStage.addLayer();
+  hintLayer = boardStage.addLayer();
+  boardStage.stage.on('click', onBoardClick);
   drawPieces();
   drawArrow();
   drawHints();
@@ -272,7 +237,7 @@ watch(
 
 onBeforeUnmount(() => {
   arrowAnim?.stop();
-  stage?.destroy();
+  boardStage?.destroy();
 });
 </script>
 
