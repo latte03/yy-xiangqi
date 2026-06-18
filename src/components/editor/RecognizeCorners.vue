@@ -11,6 +11,7 @@
 
 import { computed, ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { NButton, NSpace } from 'naive-ui';
+import { locateImageCorners } from '@/utils/recognize-api';
 
 const props = withDefaults(defineProps<{
   file: File;
@@ -42,9 +43,14 @@ const pts = reactive([
 ]);
 
 const activeCorner = ref(0);
+const autoLocating = ref(false);
+const autoLocateMessage = ref('');
 let dragIdx = -1;
 let activePointerId: number | null = null;
 let initialized = false;
+let autoLocateStarted = false;
+let userAdjusted = false;
+let autoLocateRunId = 0;
 let resizeObserver: ResizeObserver | null = null;
 
 const imageBoxStyle = computed(() => (
@@ -83,6 +89,11 @@ function initPoints() {
   pts[1] = { x: disp.w - ix, y: iy };
   pts[2] = { x: disp.w - ix, y: disp.h - iy };
   pts[3] = { x: ix, y: disp.h - iy };
+}
+
+function markUserAdjusted() {
+  userAdjusted = true;
+  autoLocateMessage.value = '';
 }
 
 function clamp(v: number, lo: number, hi: number) {
@@ -136,9 +147,59 @@ async function stabilizeAfterEnter() {
     });
     resizeObserver.observe(imgEl.value);
   }
+  maybeAutoLocate();
+}
+
+function applyNaturalCorners(corners: number[][]) {
+  if (corners.length !== 4 || nat.w <= 0 || nat.h <= 0 || disp.w <= 0 || disp.h <= 0) {
+    return false;
+  }
+  const sx = disp.w / nat.w;
+  const sy = disp.h / nat.h;
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = corners[i] ?? [];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    pts[i] = {
+      x: clamp(x * sx, 0, disp.w),
+      y: clamp(y * sy, 0, disp.h),
+    };
+  }
+  initialized = true;
+  return true;
+}
+
+async function maybeAutoLocate() {
+  if (autoLocateStarted || !props.isEnter || nat.w <= 0 || nat.h <= 0 || disp.w <= 0 || disp.h <= 0) {
+    return;
+  }
+  autoLocateStarted = true;
+  const runId = ++autoLocateRunId;
+  autoLocating.value = true;
+  autoLocateMessage.value = '正在自动定位四角…';
+  try {
+    const res = await locateImageCorners(props.file);
+    if (runId !== autoLocateRunId || userAdjusted) return;
+    if (!res.ok) {
+      autoLocateMessage.value = res.message || '自动定位失败，请手动框选。';
+      return;
+    }
+    if (applyNaturalCorners(res.corners)) {
+      autoLocateMessage.value = '已自动定位四角，可直接确认或微调。';
+    } else {
+      autoLocateMessage.value = '自动定位结果不可用，请手动框选。';
+    }
+  } catch (err) {
+    if (runId !== autoLocateRunId || userAdjusted) return;
+    autoLocateMessage.value = err instanceof Error ? err.message : '自动定位失败，请手动框选。';
+  } finally {
+    if (runId === autoLocateRunId) {
+      autoLocating.value = false;
+    }
+  }
 }
 
 function startDrag(i: number, ev: PointerEvent) {
+  markUserAdjusted();
   activeCorner.value = i;
   dragIdx = i;
   activePointerId = ev.pointerId;
@@ -169,6 +230,7 @@ function onMove(ev: PointerEvent) {
 function placeActiveCorner(ev: PointerEvent) {
   const point = pointFromEvent(ev);
   if (!point) return;
+  markUserAdjusted();
   pts[activeCorner.value] = point;
 }
 
@@ -212,6 +274,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  autoLocateRunId++;
   window.removeEventListener('resize', onResize);
   resizeObserver?.disconnect();
   endDrag();
@@ -223,6 +286,9 @@ onBeforeUnmount(() => {
   <div class="corners-picker">
     <p class="hint">
       选中一个角点后点击图片放置，或直接拖动角点到棋盘「落子网格」四角。
+    </p>
+    <p v-if="autoLocateMessage" class="auto-locate-status" :class="{ loading: autoLocating }">
+      {{ autoLocateMessage }}
     </p>
 
     <NSpace size="small" class="corner-tabs">
@@ -275,7 +341,9 @@ onBeforeUnmount(() => {
       <NButton size="small" @click="emit('cancel')">重选图片</NButton>
       <NSpace>
         <NButton v-if="props.showAuto" size="small" @click="emit('auto')">自动定位识别</NButton>
-        <NButton size="small" type="primary" @click="confirm">用框选的四角识别</NButton>
+        <NButton size="small" type="primary" :loading="autoLocating" @click="confirm">
+          用框选的四角识别
+        </NButton>
       </NSpace>
     </NSpace>
   </div>
@@ -293,6 +361,15 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: #a99472;
   line-height: 1.5;
+}
+.auto-locate-status {
+  margin: -4px 0 0;
+  color: #d8c4a2;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.auto-locate-status.loading {
+  color: #e4c184;
 }
 .img-wrap {
   position: relative;

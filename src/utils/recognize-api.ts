@@ -25,6 +25,12 @@ export interface RecognizeResponse {
   message: string;
 }
 
+export interface LocateCornersResponse {
+  ok: boolean;
+  corners: number[][];
+  message: string;
+}
+
 /** 健康检查：后端是否在线、CNN 模型是否就绪 */
 export async function checkBackend(): Promise<{ online: boolean; modelReady: boolean; message: string }> {
   try {
@@ -52,4 +58,16 @@ export async function recognizeImage(
     throw new Error(`识别服务返回 ${r.status}`);
   }
   return (await r.json()) as RecognizeResponse;
+}
+
+/** 上传截图，仅自动定位棋盘四角，返回原图像素坐标 */
+export async function locateImageCorners(file: File): Promise<LocateCornersResponse> {
+  const form = new FormData();
+  form.append('image', file);
+
+  const r = await fetch(`${BASE}/locate-corners`, { method: 'POST', body: form });
+  if (!r.ok) {
+    throw new Error(`识别服务返回 ${r.status}`);
+  }
+  return (await r.json()) as LocateCornersResponse;
 }

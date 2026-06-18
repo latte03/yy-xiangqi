@@ -27,7 +27,7 @@ from pydantic import BaseModel
 import json
 
 from recognizer.pipeline import get_classifier, recognize
-from recognizer.locate import get_locator
+from recognizer.locate import get_locator, locate_corners
 from recognizer import model_store, model_update
 
 app = FastAPI(title="xiangqi-endgame recognizer", version="0.1.0")
@@ -56,6 +56,12 @@ class RecognizeOut(BaseModel):
     cells: List[CellOut] = []
     low_confidence: List[List[int]] = []
     needs_review: bool = False
+    message: str = ""
+
+
+class LocateCornersOut(BaseModel):
+    ok: bool
+    corners: List[List[float]] = []
     message: str = ""
 
 
@@ -282,6 +288,24 @@ async def recognize_endpoint(
         low_confidence=[[r, f] for (r, f) in res.low_confidence],
         needs_review=res.needs_review,
         message=res.message,
+    )
+
+
+@app.post("/locate-corners", response_model=LocateCornersOut)
+async def locate_corners_endpoint(image: UploadFile = File(...)):
+    raw = await image.read()
+    arr = np.frombuffer(raw, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return LocateCornersOut(ok=False, message="无法解码图像。")
+
+    corners = locate_corners(img)
+    if corners is None:
+        return LocateCornersOut(ok=False, message="未能自动定位棋盘四角，请手动框选。")
+    return LocateCornersOut(
+        ok=True,
+        corners=[[float(x), float(y)] for x, y in corners.tolist()],
+        message="已自动定位棋盘四角。",
     )
 
 

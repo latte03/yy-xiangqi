@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
+import { storeToRefs } from 'pinia';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import {
   NAlert,
   NButton,
@@ -12,6 +13,9 @@ import {
   NTag,
 } from 'naive-ui';
 import RecognizeCorners from '@/components/editor/RecognizeCorners.vue';
+import { toFen } from '@/engine/fen';
+import { useEditorStore } from '@/stores/editor';
+import { useTrainingSampleStore } from '@/stores/training-sample';
 import {
   checkModel,
   extractTrainingCrops,
@@ -24,11 +28,13 @@ import {
 } from '@/utils/training-api';
 
 const fileInput = ref<HTMLInputElement | null>(null);
-const selectedFile = shallowRef<File | null>(null);
+const editor = useEditorStore();
+const trainingSample = useTrainingSampleStore();
+const { file: selectedFile, corners } = storeToRefs(trainingSample);
 const showCornerPicker = ref(false);
 const fen = ref('');
-const corners = ref('');
 const error = ref('');
+const autoSyncFen = ref(true);
 const status = ref<TrainingStatus>({
   running: false,
   phase: 'idle',
@@ -70,6 +76,18 @@ const locateTrainOptions = reactive({
 let pollTimer: number | null = null;
 
 const selectedFileLabel = computed(() => selectedFile.value?.name ?? '未选择截图');
+const editorPieceCount = computed(() =>
+  editor.board.reduce((count, row) => count + row.filter(Boolean).length, 0),
+);
+const editorFen = computed(() =>
+  toFen({
+    board: editor.board,
+    side: 'red',
+    halfmove: 0,
+    fullmove: 1,
+  }),
+);
+const canUseEditorFen = computed(() => editorPieceCount.value > 0);
 const statusType = computed<'success' | 'error' | 'info' | 'warning'>(() => {
   if (status.value.running) return 'info';
   return status.value.ok ? 'success' : 'error';
@@ -99,9 +117,17 @@ function pickImage() {
 
 function onFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
-  selectedFile.value = input.files?.[0] ?? null;
+  trainingSample.setFile(input.files?.[0] ?? null);
   input.value = '';
-  corners.value = '';
+}
+
+function syncFenFromEditor() {
+  if (!canUseEditorFen.value) {
+    error.value = '摆棋工坊当前棋盘为空。';
+    return;
+  }
+  fen.value = editorFen.value;
+  error.value = '';
 }
 
 function openCorners() {
@@ -224,6 +250,22 @@ onMounted(async () => {
   }
 });
 
+watch(
+  editorFen,
+  (value) => {
+    if (autoSyncFen.value && canUseEditorFen.value) {
+      fen.value = value;
+    }
+  },
+  { immediate: true },
+);
+
+watch(autoSyncFen, (enabled) => {
+  if (enabled && canUseEditorFen.value) {
+    fen.value = editorFen.value;
+  }
+});
+
 const isEnter = ref(false);
 function onAfterEnter() {
   isEnter.value = true;
@@ -246,6 +288,27 @@ function onAfterEnter() {
             <NButton size="small" @click="pickImage">选择真实截图</NButton>
             <NTag :bordered="false" type="info">{{ selectedFileLabel }}</NTag>
           </div>
+          <div class="fen-source-row">
+            <NButton
+              size="small"
+              secondary
+              :disabled="!canUseEditorFen"
+              @click="syncFenFromEditor"
+            >
+              使用摆棋工坊 FEN
+            </NButton>
+            <NCheckbox v-model:checked="autoSyncFen">自动同步</NCheckbox>
+            <NTag :bordered="false" :type="canUseEditorFen ? 'success' : 'default'">
+              当前棋盘 {{ editorPieceCount }} 子
+            </NTag>
+          </div>
+          <NAlert
+            v-if="editor.validation.hardErrors.length > 0 && canUseEditorFen"
+            type="warning"
+            :show-icon="false"
+          >
+            当前摆棋校验未通过：{{ editor.validation.hardErrors.join('、') }}
+          </NAlert>
           <NInput
             v-model:value="fen"
             type="textarea"
@@ -437,6 +500,7 @@ function onAfterEnter() {
 }
 
 .file-row,
+.fen-source-row,
 .corners-row {
   display: flex;
   gap: 10px;
@@ -498,6 +562,7 @@ function onAfterEnter() {
   }
 
   .file-row,
+  .fen-source-row,
   .corners-row {
     flex-direction: column;
     align-items: stretch;
