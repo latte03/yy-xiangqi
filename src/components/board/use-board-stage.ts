@@ -10,7 +10,7 @@
  * 各组件仍保留自己的交互（落子/动画 vs 调色板/拖拽），
  * 只是不再重复维护这套底座。
  */
-import Konva from 'konva';
+import Konva, { type Stage, type Layer, type Group } from '@/lib/konva';
 import type { Board, Piece, Position } from '@/types';
 import {
   addPiece,
@@ -23,11 +23,11 @@ import {
 } from './board-drawing';
 
 export interface BoardStage {
-  stage: Konva.Stage;
+  stage: Stage;
   /** 底板层（棋盘底纹/格线/河界），已绘制 */
-  boardLayer: Konva.Layer;
+  boardLayer: Layer;
   /** 追加一个新图层并挂到 stage 上 */
-  addLayer: () => Konva.Layer;
+  addLayer: () => Layer;
   /** 当前指针所在的格子（无则 null） */
   pointerCell: () => Position | null;
   /** 销毁 stage 及其所有图层 */
@@ -63,7 +63,7 @@ export interface PaintPiecesOptions {
   /** 判断某格是否处于选中态 */
   isSelected?: (file: number, rank: number) => boolean;
   /** 每枚棋子绘制后回调，供调用方挂动画/拖拽/事件 */
-  onNode?: (node: Konva.Group, piece: Piece, file: number, rank: number) => void;
+  onNode?: (node: Group, piece: Piece, file: number, rank: number) => void;
 }
 
 /**
@@ -71,7 +71,7 @@ export interface PaintPiecesOptions {
  * 返回是否调用了 batchDraw（始终 true，便于链式）。
  */
 export function paintPieces(
-  layer: Konva.Layer,
+  layer: Layer,
   board: Board,
   options: PaintPiecesOptions = {},
 ): void {

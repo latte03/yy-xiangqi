@@ -5,7 +5,7 @@
    * 保证候选棋子与棋盘棋子像素级一致。
    */
   import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
-  import type Konva from 'konva'
+  import type { Stage } from '@/lib/konva'
   import type { Color, PieceType } from '@/types'
   import { renderStandalonePiece } from '@/components/board/board-drawing'
 
@@ -21,7 +21,7 @@
   )
 
   const canvasRef = ref<HTMLDivElement | null>(null)
-  let stage: Konva.Stage | null = null
+  let stage: Stage | null = null
 
   function render() {
     if (!canvasRef.value) return

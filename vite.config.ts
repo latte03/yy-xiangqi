@@ -19,7 +19,8 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // 默认不出 sourcemap（产物更小）；需要调试时设 VITE_SOURCEMAP=true
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
     assetsInlineLimit: 0,
     rollupOptions: {
       output: {

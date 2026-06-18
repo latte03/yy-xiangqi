@@ -1,4 +1,4 @@
-import Konva from 'konva';
+import Konva, { type Stage, type Layer, type Group } from '@/lib/konva';
 import type { Color, Piece, PieceType, Position } from '@/types';
 
 export const CELL_SIZE = 58;
@@ -58,7 +58,7 @@ export function screenToCell(x: number, y: number): Position | null {
   return { file, rank };
 }
 
-export function drawBoardLayer(layer: Konva.Layer): void {
+export function drawBoardLayer(layer: Layer): void {
   layer.destroyChildren();
 
   // 1) 底板：暖木色，柔和圆角与外投影
@@ -219,7 +219,7 @@ export function buildPieceGroup(
   piece: Piece,
   radius: number = PIECE_RADIUS,
   selected = false,
-): Konva.Group {
+): Group {
   const fontSize = 26 * (radius / PIECE_RADIUS);
   const group = new Konva.Group();
 
@@ -304,7 +304,7 @@ export function renderStandalonePiece(
   piece: Piece,
   size: number,
   selected = false,
-): Konva.Stage {
+): Stage {
   const stage = new Konva.Stage({ container, width: size, height: size });
   const layer = new Konva.Layer({ listening: false });
   // 留出阴影/选中环的余量，避免被画布裁切
@@ -318,12 +318,12 @@ export function renderStandalonePiece(
 }
 
 export function addPiece(
-  layer: Konva.Layer,
+  layer: Layer,
   piece: Piece,
   file: number,
   rank: number,
   selected = false,
-): Konva.Group {
+): Group {
   const x = fileX(file);
   const y = rankY(rank);
   const radius = PIECE_RADIUS;
@@ -334,7 +334,7 @@ export function addPiece(
   return group;
 }
 
-function drawPalace(layer: Konva.Layer, topRank: number): void {
+function drawPalace(layer: Layer, topRank: number): void {
   layer.add(new Konva.Line({
     points: [fileX(3), rankY(topRank), fileX(5), rankY(topRank + 2)],
     stroke: INK,
@@ -347,7 +347,7 @@ function drawPalace(layer: Konva.Layer, topRank: number): void {
   }));
 }
 
-function drawMarkers(layer: Konva.Layer): void {
+function drawMarkers(layer: Layer): void {
   const points: Array<[number, number]> = [
     [1, 2],
     [7, 2],
@@ -370,7 +370,7 @@ function drawMarkers(layer: Konva.Layer): void {
   }
 }
 
-function addMarker(layer: Konva.Layer, file: number, rank: number): void {
+function addMarker(layer: Layer, file: number, rank: number): void {
   const x = fileX(file);
   const y = rankY(rank);
   const len = 7;

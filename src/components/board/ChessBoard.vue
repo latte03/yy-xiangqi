@@ -5,12 +5,13 @@
  */
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import Konva from 'konva';
+import Konva from '@/lib/konva';
 import { useGameStore } from '@/stores/game';
 import { generateLegalMoves } from '@/engine/legal';
 import { endSummary as formatEndSummary } from '@/utils/end-state';
 import { CELL_SIZE, FILES, HEIGHT, rankY, fileX, RANKS, WIDTH } from './board-drawing';
 import { createBoardStage, paintPieces, type BoardStage } from './use-board-stage';
+import type { Layer, Animation } from '@/lib/konva';
 
 const game = useGameStore();
 
@@ -21,10 +22,10 @@ const lastAnimatedMoveCount = ref(0);
 const endSummary = computed(() => formatEndSummary(game.endResult));
 
 let boardStage: BoardStage | null = null;
-let pieceLayer: Konva.Layer | null = null;
-let arrowLayer: Konva.Layer | null = null;
-let hintLayer: Konva.Layer | null = null;
-let arrowAnim: Konva.Animation | null = null;
+let pieceLayer: Layer | null = null;
+let arrowLayer: Layer | null = null;
+let hintLayer: Layer | null = null;
+let arrowAnim: Animation | null = null;
 
 function drawPieces() {
   if (!pieceLayer) return;

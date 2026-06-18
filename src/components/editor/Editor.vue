@@ -13,7 +13,7 @@
    */
 
   import { ref, shallowRef, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-  import Konva from 'konva'
+  import Konva, { type Layer } from '@/lib/konva'
   import { NCard, NSpace, NButton, NTag, NSelect, NDropdown } from 'naive-ui'
   import RecognizePanel from './RecognizePanel.vue'
   import PalettePiece from './PalettePiece.vue'
@@ -50,8 +50,8 @@
   const pasteOnce = ref(false) // 右键「复制」触发的一次性粘贴态
   let suppressPaletteClick = false
   let boardStage: BoardStage | null = null
-  let pieceLayer: Konva.Layer | null = null
-  let highlightLayer: Konva.Layer | null = null
+  let pieceLayer: Layer | null = null
+  let highlightLayer: Layer | null = null
   let suppressNextClick = false
 
   function setCursor(cursor: string) {
