@@ -1,22 +1,19 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import {
-  NButton,
-  NConfigProvider,
-  NMessageProvider,
-  NSelect,
-  NStatistic,
-  NTag,
-  darkTheme,
-} from 'naive-ui';
-import type { GlobalThemeOverrides } from 'naive-ui';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { NButton, NConfigProvider, NMessageProvider, NTag, darkTheme } from 'naive-ui';
 import ChessBoard from './components/board/ChessBoard.vue';
 import Editor from './components/editor/Editor.vue';
 import LoadingSplash from './components/common/LoadingSplash.vue';
+import TitleBar from './components/layout/TitleBar.vue';
+import StatusBar from './components/layout/StatusBar.vue';
+import HomeScreen from './components/home/HomeScreen.vue';
+import MatchPanel from './components/play/MatchPanel.vue';
 import { useGameStore } from './stores/game';
 import { useUiStore } from './stores/ui';
 import { checkBackend } from './utils/recognize-api';
 import { getModelStatus } from './utils/model-update-api';
+import { endSummary } from './utils/end-state';
+import { naiveThemeOverrides } from './theme/naive-theme';
 
 // 训练工作台仅维护者/开发构建可见；分发给终端用户的构建不含训练入口。
 // 开发环境 (vite dev) 默认开启；其它构建需显式设 VITE_ENABLE_TRAINING=true。
@@ -26,7 +23,6 @@ const TRAINING_ENABLED =
 const Training = TRAINING_ENABLED
   ? defineAsyncComponent(() => import('./components/training/Training.vue'))
   : null;
-import { endReasonLabel, endSummary, winnerLabel } from './utils/end-state';
 
 const game = useGameStore();
 const ui = useUiStore();
@@ -59,217 +55,17 @@ onMounted(async () => {
   booting.value = false;
 });
 
-const backendLabel = computed(() => {
-  if (!ui.backendOnline) return '识别服务：离线';
-  if (!ui.modelReady) return '识别服务：在线（模型未就绪）';
-  return `识别服务：在线${ui.modelVersion != null ? ` · 模型 v${ui.modelVersion}` : ''}`;
-});
-
 type Screen = 'home' | 'editor' | 'play' | 'training';
 type Entry = 'standard' | 'custom';
 
 const screen = ref<Screen>('home');
 const activeEntry = ref<Entry>('standard');
-const showCheckNotice = shallowRef(false);
-
-const palette = {
-  bg: '#120f0c',
-  panel: 'rgba(24, 18, 14, 0.92)',
-  panelSoft: 'rgba(255, 244, 214, 0.07)',
-  panelHover: 'rgba(255, 244, 214, 0.11)',
-  border: 'rgba(236, 202, 142, 0.22)',
-  borderStrong: 'rgba(236, 202, 142, 0.42)',
-  text: '#f6ead4',
-  textSoft: '#d8c4a2',
-  muted: '#a99472',
-  gold: '#d2aa70',
-  goldHover: '#e4c184',
-  goldPressed: '#b98b4c',
-  clay: '#b8643b',
-  clayHover: '#cf7b4d',
-  clayPressed: '#964b2e',
-  green: '#5fae7a',
-  greenHover: '#78c791',
-  greenPressed: '#478a5c',
-  teal: '#58c7a2',
-  tealHover: '#78d8ba',
-  tealPressed: '#3d9879',
-  red: '#c85f4a',
-  redHover: '#df765f',
-  redPressed: '#9f4336',
-};
-
-const naiveThemeOverrides: GlobalThemeOverrides = {
-  common: {
-    baseColor: palette.bg,
-    bodyColor: palette.bg,
-    popoverColor: 'rgba(24, 18, 14, 0.98)',
-    cardColor: palette.panel,
-    modalColor: palette.panel,
-    inputColor: 'rgba(16, 12, 9, 0.72)',
-    tableColor: palette.panel,
-    primaryColor: palette.gold,
-    primaryColorHover: palette.goldHover,
-    primaryColorPressed: palette.goldPressed,
-    primaryColorSuppl: palette.clay,
-    infoColor: palette.teal,
-    infoColorHover: palette.tealHover,
-    infoColorPressed: palette.tealPressed,
-    infoColorSuppl: palette.teal,
-    successColor: palette.green,
-    successColorHover: palette.greenHover,
-    successColorPressed: palette.greenPressed,
-    successColorSuppl: palette.green,
-    warningColor: palette.gold,
-    warningColorHover: palette.goldHover,
-    warningColorPressed: palette.goldPressed,
-    warningColorSuppl: palette.gold,
-    errorColor: palette.red,
-    errorColorHover: palette.redHover,
-    errorColorPressed: palette.redPressed,
-    errorColorSuppl: palette.red,
-    textColorBase: palette.text,
-    textColor1: palette.text,
-    textColor2: palette.textSoft,
-    textColor3: palette.muted,
-    placeholderColor: 'rgba(216, 196, 162, 0.52)',
-    borderColor: palette.border,
-    dividerColor: 'rgba(236, 202, 142, 0.14)',
-    hoverColor: palette.panelHover,
-    pressedColor: 'rgba(184, 100, 59, 0.18)',
-    borderRadius: '10px',
-    borderRadiusSmall: '8px',
-    fontFamily:
-      '"Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
-    fontWeightStrong: '700',
-  },
-  Button: {
-    borderRadiusTiny: '8px',
-    borderRadiusSmall: '9px',
-    borderRadiusMedium: '10px',
-    borderRadiusLarge: '12px',
-    fontWeight: '650',
-    color: 'rgba(255, 244, 214, 0.06)',
-    colorHover: 'rgba(255, 244, 214, 0.11)',
-    colorPressed: 'rgba(184, 100, 59, 0.18)',
-    colorFocus: 'rgba(255, 244, 214, 0.11)',
-    textColor: palette.textSoft,
-    textColorHover: palette.text,
-    textColorPressed: palette.text,
-    border: `1px solid ${palette.border}`,
-    borderHover: `1px solid ${palette.borderStrong}`,
-    borderPressed: `1px solid ${palette.clay}`,
-    borderFocus: `1px solid ${palette.gold}`,
-    colorPrimary: palette.gold,
-    colorHoverPrimary: palette.goldHover,
-    colorPressedPrimary: palette.goldPressed,
-    colorFocusPrimary: palette.goldHover,
-    textColorPrimary: '#1e1209',
-    textColorHoverPrimary: '#1e1209',
-    textColorPressedPrimary: '#1e1209',
-    textColorFocusPrimary: '#1e1209',
-    borderPrimary: '1px solid transparent',
-    borderHoverPrimary: '1px solid transparent',
-    borderPressedPrimary: '1px solid transparent',
-    borderFocusPrimary: `1px solid ${palette.goldHover}`,
-    colorError: 'rgba(200, 95, 74, 0.18)',
-    colorHoverError: 'rgba(200, 95, 74, 0.26)',
-    colorPressedError: 'rgba(200, 95, 74, 0.32)',
-    colorFocusError: 'rgba(200, 95, 74, 0.26)',
-    textColorError: '#ffb6a5',
-    textColorHoverError: '#ffd0c5',
-    textColorPressedError: '#ffd0c5',
-    textColorFocusError: '#ffd0c5',
-    textColorTextError: '#ffb6a5',
-    textColorTextHoverError: '#ffd0c5',
-    textColorTextPressedError: '#ffd0c5',
-    textColorTextFocusError: '#ffd0c5',
-    textColorGhostError: '#ffb6a5',
-    textColorGhostHoverError: '#ffd0c5',
-    textColorGhostPressedError: '#ffd0c5',
-    textColorGhostFocusError: '#ffd0c5',
-    borderError: '1px solid rgba(200, 95, 74, 0.38)',
-    borderHoverError: '1px solid rgba(223, 118, 95, 0.62)',
-    borderPressedError: '1px solid rgba(223, 118, 95, 0.72)',
-    borderFocusError: '1px solid rgba(223, 118, 95, 0.72)',
-  },
-  Select: {
-    menuBoxShadow: '0 18px 48px rgba(0, 0, 0, 0.42)',
-    peers: {
-      InternalSelection: {
-        borderRadius: '10px',
-        color: 'rgba(16, 12, 9, 0.72)',
-        colorActive: 'rgba(28, 20, 14, 0.94)',
-        textColor: palette.text,
-        placeholderColor: 'rgba(216, 196, 162, 0.52)',
-        border: `1px solid ${palette.border}`,
-        borderHover: `1px solid ${palette.borderStrong}`,
-        borderActive: `1px solid ${palette.gold}`,
-        borderFocus: `1px solid ${palette.gold}`,
-        boxShadowFocus: '0 0 0 2px rgba(210, 170, 112, 0.18)',
-        caretColor: palette.gold,
-        arrowColor: palette.gold,
-      },
-      InternalSelectMenu: {
-        borderRadius: '12px',
-        color: 'rgba(24, 18, 14, 0.98)',
-        optionTextColor: palette.textSoft,
-        optionTextColorActive: '#fff4d4',
-        optionColorPending: palette.panelHover,
-        optionColorActive: 'rgba(210, 170, 112, 0.18)',
-        optionColorActivePending: 'rgba(210, 170, 112, 0.24)',
-        optionCheckColor: palette.gold,
-      },
-    },
-  },
-  Tag: {
-    borderRadius: '8px',
-    fontWeightStrong: '700',
-    color: 'rgba(255, 244, 214, 0.08)',
-    textColor: palette.textSoft,
-    border: `1px solid ${palette.border}`,
-    colorPrimary: 'rgba(210, 170, 112, 0.18)',
-    textColorPrimary: '#ffe7b1',
-    borderPrimary: '1px solid rgba(210, 170, 112, 0.38)',
-    colorInfo: 'rgba(88, 199, 162, 0.18)',
-    textColorInfo: '#9fe8cf',
-    borderInfo: '1px solid rgba(88, 199, 162, 0.34)',
-    colorSuccess: 'rgba(95, 174, 122, 0.18)',
-    textColorSuccess: '#b9edc7',
-    borderSuccess: '1px solid rgba(95, 174, 122, 0.34)',
-    colorWarning: 'rgba(210, 170, 112, 0.18)',
-    textColorWarning: '#ffe2a7',
-    borderWarning: '1px solid rgba(210, 170, 112, 0.34)',
-    colorError: 'rgba(200, 95, 74, 0.2)',
-    textColorError: '#ffc1b2',
-    borderError: '1px solid rgba(200, 95, 74, 0.38)',
-  },
-  Statistic: {
-    labelTextColor: palette.muted,
-    valueTextColor: '#f5e5c8',
-    labelFontWeight: '600',
-    valueFontWeight: '650',
-  },
-};
-
-const difficultyOptions = [
-  { label: '入门 depth 2', value: 'easy' },
-  { label: '业余 depth 4', value: 'medium' },
-  { label: '进阶 depth 6', value: 'hard' },
-  { label: '挑战 depth 8', value: 'expert' },
-];
-
-const sideOptions = [
-  { label: '玩家执黑，AI 执红', value: 'ai-red' },
-  { label: '玩家执红，AI 执黑', value: 'human-red' },
-];
+const showCheckNotice = ref(false);
 
 const entryTitle = computed(() => {
   if (screen.value === 'training') return '模型训练';
   return activeEntry.value === 'standard' ? '普通对战' : '自定义残局';
 });
-const humanSideLabel = computed(() => (game.humanSide === 'red' ? '红方' : '黑方'));
-const aiSideLabel = computed(() => (game.aiSide === 'red' ? '红方' : '黑方'));
 const currentTurnLabel = computed(() => {
   if (game.ended) return '本局已结束';
   const side = game.side === 'red' ? '红方' : '黑方';
@@ -284,23 +80,12 @@ const restartActionLabel = computed(() => {
   if (activeEntry.value === 'custom') return '重新摆棋';
   return game.ended ? '再来一局' : '重新开局';
 });
-const movePairs = computed(() => game.moves.map((move, index) => ({
-  index,
-  label: `${index % 2 === 0 ? `${Math.floor(index / 2) + 1}. ` : ''}${move}`,
-})));
-const resultReasonLabel = computed(() => endReasonLabel(game.endResult));
-const resultWinnerLabel = computed(() => winnerLabel(game.endResult?.winner));
 const resultSummary = computed(() => endSummary(game.endResult));
-const editorFen = computed(() => ui.contextText);
-const fenCopied = shallowRef(false);
 
 let checkNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-let fenCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
 function flashCheckNotice() {
-  if (checkNoticeTimer) {
-    clearTimeout(checkNoticeTimer);
-  }
+  if (checkNoticeTimer) clearTimeout(checkNoticeTimer);
   showCheckNotice.value = true;
   checkNoticeTimer = setTimeout(() => {
     showCheckNotice.value = false;
@@ -314,57 +99,6 @@ function hideCheckNotice() {
     checkNoticeTimer = null;
   }
   showCheckNotice.value = false;
-}
-
-function markFenCopied() {
-  if (fenCopiedTimer) clearTimeout(fenCopiedTimer);
-  fenCopied.value = true;
-  fenCopiedTimer = setTimeout(() => {
-    fenCopied.value = false;
-    fenCopiedTimer = null;
-  }, 1400);
-}
-
-async function copyEditorFen() {
-  if (!editorFen.value) return;
-  try {
-    await navigator.clipboard.writeText(editorFen.value);
-    markFenCopied();
-  } catch {
-    const textarea = document.createElement('textarea');
-    textarea.value = editorFen.value;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand('copy');
-    textarea.remove();
-    markFenCopied();
-  }
-}
-
-async function withAppWindow(action: 'close' | 'minimize' | 'toggleMaximize' | 'startDragging') {
-  if (!isTauri) return;
-  const { getCurrentWindow } = await import('@tauri-apps/api/window');
-  const appWindow = getCurrentWindow();
-  await appWindow[action]();
-}
-
-function closeWindow() {
-  void withAppWindow('close');
-}
-
-function minimizeWindow() {
-  void withAppWindow('minimize');
-}
-
-function toggleWindowMaximize() {
-  void withAppWindow('toggleMaximize');
-}
-
-function startWindowDrag(event: MouseEvent) {
-  if ((event.target as HTMLElement | null)?.closest('button, .n-button')) return;
-  void withAppWindow('startDragging');
 }
 
 function cancelAiIfAvailable() {
@@ -426,206 +160,98 @@ watch(
 watch(
   () => game.ended,
   (ended) => {
-    if (ended) {
-      hideCheckNotice();
-    }
+    if (ended) hideCheckNotice();
   },
 );
 
-onBeforeUnmount(() => {
-  hideCheckNotice();
-  if (fenCopiedTimer) {
-    clearTimeout(fenCopiedTimer);
-    fenCopiedTimer = null;
-  }
-});
+onBeforeUnmount(hideCheckNotice);
 </script>
 
 <template>
   <NConfigProvider :theme="darkTheme" :theme-overrides="naiveThemeOverrides">
-   <NMessageProvider :max="3" placement="top">
-    <div class="app-shell" :class="{ 'is-tauri': isTauri }">
-      <header class="titlebar" data-tauri-drag-region @mousedown="startWindowDrag">
-        <div v-if="isTauri" class="window-controls">
-          <button class="window-control close" type="button" aria-label="关闭窗口" @click="closeWindow" />
-          <button class="window-control minimize" type="button" aria-label="最小化窗口" @click="minimizeWindow" />
-          <button class="window-control maximize" type="button" aria-label="缩放窗口" @click="toggleWindowMaximize" />
-        </div>
-        <div class="titlebar-drag" data-tauri-drag-region />
-        <div class="titlebar-actions">
-          <NButton v-if="screen !== 'editor'" size="small" type="primary" secondary @click="openCustomEditor">
-            自定义残局
-          </NButton>
-          <NTag v-else :bordered="false" type="warning">自定义残局</NTag>
-          <NButton v-if="screen !== 'home'" size="small" secondary @click="goHome">返回入口</NButton>
-        </div>
-      </header>
+    <NMessageProvider :max="3" placement="top">
+      <div class="app-shell" :class="{ 'is-tauri': isTauri }">
+        <TitleBar
+          :screen="screen"
+          :training-enabled="TRAINING_ENABLED"
+          :is-tauri="isTauri"
+          @open-editor="openCustomEditor"
+          @open-training="openTraining"
+          @go-home="goHome"
+        />
 
-      <main class="main-stage">
-        <section v-if="screen === 'home'" class="entry-screen">
-          <div class="entry-copy">
-            <p class="eyebrow">中国象棋 · 人机练习</p>
-            <h1>选择一种开局方式</h1>
-            <p class="lead">直接下完整棋局，或者先摆出目标残局，再交给 AI 和你对弈。</p>
-          </div>
+        <main class="main-stage">
+          <HomeScreen
+            v-if="screen === 'home'"
+            :training-enabled="TRAINING_ENABLED"
+            @start-standard="startStandardGame"
+            @open-editor="openCustomEditor"
+            @open-training="openTraining"
+          />
 
-          <div class="entry-grid">
-            <article class="entry-card custom-entry">
-              <span class="entry-number">01</span>
-              <h2>自定义残局</h2>
-              <p>截图导入或手动摆出残局，校验后交给 AI 推演走法。</p>
-              <div class="entry-notes">
-                <span>截图识别布局</span>
-                <span>自动校验将帅</span>
-                <span>撤销重做兜底</span>
-              </div>
-              <NButton type="primary" size="large" block @click="openCustomEditor">
-                进入摆棋工坊
-              </NButton>
-            </article>
+          <section v-else-if="screen === 'editor'" class="editor-screen workbench-screen">
+            <Editor @submitted="onCustomSubmitted" />
+          </section>
 
-            <article class="entry-card standard-entry">
-              <span class="entry-number">02</span>
-              <h2>普通对战</h2>
-              <p>从标准初始局面开始，按执方设置决定玩家或 AI 执红。</p>
-              <div class="entry-settings">
-                <label>
-                  <span>AI 难度</span>
-                  <NSelect v-model:value="game.settings.difficulty" :options="difficultyOptions" />
-                </label>
-                <label>
-                  <span>执方</span>
-                  <NSelect v-model:value="game.settings.side" :options="sideOptions" />
-                </label>
-              </div>
-              <NButton type="primary" size="large" block @click="startStandardGame">
-                进入普通对战
-              </NButton>
-            </article>
-
-            <article v-if="TRAINING_ENABLED" class="entry-card training-entry">
-              <span class="entry-number">03</span>
-              <h2>模型训练</h2>
-              <p>把真实截图和正确 FEN 转成 crops，重新训练 ONNX 识别模型。</p>
-              <div class="entry-notes">
-                <span>提取真实裁剪</span>
-                <span>生成 dataset</span>
-                <span>训练并检查 ONNX</span>
-              </div>
-              <NButton type="primary" size="large" block @click="openTraining">
-                进入训练工作台
-              </NButton>
-            </article>
-          </div>
-        </section>
-
-        <section v-else-if="screen === 'editor'" class="editor-screen workbench-screen">
-          <Editor @submitted="onCustomSubmitted" />
-        </section>
-
-        <section v-else-if="screen === 'training' && TRAINING_ENABLED && Training" class="editor-screen">
-          <div class="section-heading">
-            <p class="eyebrow">model training</p>
-            <h1>模型训练</h1>
-            <p>用真实截图修正识别模型，完成后回到自定义残局上传截图测试。</p>
-          </div>
-          <Training />
-        </section>
-
-        <section v-else class="play-screen">
-          <div class="table-header">
-            <div>
-              <p class="eyebrow">match table</p>
-              <h1>{{ entryTitle }}</h1>
+          <section v-else-if="screen === 'training' && TRAINING_ENABLED && Training" class="editor-screen">
+            <div class="section-heading">
+              <p class="eyebrow">model training</p>
+              <h1>模型训练</h1>
+              <p>用真实截图修正识别模型，完成后回到自定义残局上传截图测试。</p>
             </div>
-            <div class="match-actions">
-              <NButton :disabled="!game.canUndo" secondary @click="game.undoMove">
-                ↶ 悔棋
-              </NButton>
-              <NButton :type="game.ended ? 'primary' : 'default'" secondary @click="restartCurrent">
-                {{ restartActionLabel }}
-              </NButton>
-              <NButton v-if="!game.ended" class="resign-button" type="error" secondary @click="game.resignGame">
-                认输
-              </NButton>
-              <NButton tertiary @click="goHome">换入口</NButton>
+            <Training />
+          </section>
+
+          <section v-else class="play-screen">
+            <div class="table-header">
+              <div>
+                <p class="eyebrow">match table</p>
+                <h1>{{ entryTitle }}</h1>
+              </div>
+              <div class="match-actions">
+                <NButton :disabled="!game.canUndo" secondary @click="game.undoMove">
+                  ↶ 悔棋
+                </NButton>
+                <NButton :type="game.ended ? 'primary' : 'default'" secondary @click="restartCurrent">
+                  {{ restartActionLabel }}
+                </NButton>
+                <NButton v-if="!game.ended" class="resign-button" type="error" secondary @click="game.resignGame">
+                  认输
+                </NButton>
+                <NButton tertiary @click="goHome">换入口</NButton>
+              </div>
             </div>
-          </div>
 
-          <div class="play-layout">
-            <section class="board-panel">
-              <div class="board-panel-head">
-                <NTag :bordered="false" :type="statusTagType">
-                  当前：{{ currentTurnLabel }}
-                </NTag>
-                <NTag v-if="game.ended" :bordered="false" type="error">{{ resultSummary }}</NTag>
-                <NTag v-else-if="game.inCheck" :bordered="false" type="error">将军</NTag>
-              </div>
-              <ChessBoard />
-            </section>
-
-            <aside class="match-panel">
-              <div class="stats-grid">
-                <NStatistic label="玩家执方" :value="humanSideLabel" />
-                <NStatistic label="AI 执方" :value="aiSideLabel" />
-                <NStatistic label="回合数" :value="game.fullmove" />
-                <NStatistic label="限着" :value="game.halfmove" />
-              </div>
-
-              <div v-if="game.ended" class="result-box" role="status">
-                <strong>{{ resultWinnerLabel }}</strong>
-                <span>
-                  {{ resultReasonLabel }}
-                </span>
-              </div>
-
-              <section class="move-log">
-                <div class="panel-title">
-                  <h2>走法记录</h2>
-                  <span>{{ game.moves.length }} 手</span>
+            <div class="play-layout">
+              <section class="board-panel">
+                <div class="board-panel-head">
+                  <NTag :bordered="false" :type="statusTagType">
+                    当前：{{ currentTurnLabel }}
+                  </NTag>
+                  <NTag v-if="game.ended" :bordered="false" type="error">{{ resultSummary }}</NTag>
+                  <NTag v-else-if="game.inCheck" :bordered="false" type="error">将军</NTag>
                 </div>
-                <div class="moves">
-                  <span v-if="movePairs.length === 0" class="empty">等待第一手</span>
-                  <span v-for="move in movePairs" :key="move.index" class="move">
-                    {{ move.label }}
-                  </span>
-                </div>
+                <ChessBoard />
               </section>
-            </aside>
+
+              <MatchPanel />
+            </div>
+          </section>
+        </main>
+
+        <Transition name="check-notice">
+          <div v-if="showCheckNotice" class="check-notice" aria-live="assertive">
+            <span>将军</span>
           </div>
-        </section>
-      </main>
+        </Transition>
 
-      <Transition name="check-notice">
-        <div v-if="showCheckNotice" class="check-notice" aria-live="assertive">
-          <span>将军</span>
-        </div>
-      </Transition>
+        <StatusBar :screen="screen" />
 
-      <footer class="status-bar">
-        <span class="status-item">
-          <i class="dot" :class="{ on: ui.backendOnline, warn: ui.backendOnline && !ui.modelReady }" />
-          {{ backendLabel }}
-        </span>
-        <span v-if="screen === 'editor' && ui.cursorText" class="status-item">光标：{{ ui.cursorText }}</span>
-        <button
-          v-if="screen === 'editor' && editorFen"
-          class="status-copy"
-          type="button"
-          @click="copyEditorFen"
-        >
-          {{ fenCopied ? '已复制 FEN' : '复制 FEN' }}
-        </button>
-        <span class="status-spacer" />
-        <span v-if="screen === 'editor' && editorFen" class="status-item mono">{{ editorFen }}</span>
-        <span v-if="screen === 'play'" class="status-item mono">{{ game.fen }}</span>
-      </footer>
-
-      <Transition name="splash-fade">
-        <LoadingSplash v-if="booting" />
-      </Transition>
-    </div>
-   </NMessageProvider>
+        <Transition name="splash-fade">
+          <LoadingSplash v-if="booting" />
+        </Transition>
+      </div>
+    </NMessageProvider>
   </NConfigProvider>
 </template>
 
@@ -661,131 +287,11 @@ onBeforeUnmount(() => {
   border-radius: 16px;
 }
 
-/* 底部状态栏 */
-.status-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 28px;
-  z-index: 12;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px;
-  background: rgba(16, 12, 9, 0.96);
-  border-top: 1px solid rgba(236, 202, 142, 0.16);
-  color: #a99472;
-  font-size: 12px;
-  backdrop-filter: blur(6px);
-}
-.status-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.status-item.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  opacity: 0.85;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 52vw;
-}
-.status-copy {
-  height: 20px;
-  padding: 0 8px;
-  border: 1px solid rgba(236, 202, 142, 0.22);
-  border-radius: 6px;
-  background: rgba(255, 244, 214, 0.06);
-  color: #d8c4a2;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 18px;
-}
-.status-copy:hover {
-  border-color: rgba(236, 202, 142, 0.42);
-  color: #f6ead4;
-}
-.status-spacer {
-  flex: 1;
-}
-.status-bar .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #c85f4a;
-}
-.status-bar .dot.on {
-  background: #5fae7a;
-}
-.status-bar .dot.warn {
-  background: #d2aa70;
-}
 .splash-fade-leave-active {
   transition: opacity 0.35s ease;
 }
 .splash-fade-leave-to {
   opacity: 0;
-}
-
-.titlebar {
-  width: min(1560px, calc(100vw - 40px));
-  margin: 0 auto;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  -webkit-app-region: drag;
-  user-select: none;
-}
-
-.window-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  -webkit-app-region: no-drag;
-}
-
-.window-control {
-  width: 13px;
-  height: 13px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
-}
-
-.window-control.close {
-  background: #ff5f57;
-}
-
-.window-control.minimize {
-  background: #febc2e;
-}
-
-.window-control.maximize {
-  background: #28c840;
-}
-
-.window-control:hover {
-  filter: brightness(1.08);
-}
-
-.titlebar-drag {
-  flex: 1;
-  align-self: stretch;
-}
-
-.titlebar-actions,
-.match-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  -webkit-app-region: no-drag;
 }
 
 .resign-button {
@@ -803,23 +309,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.entry-screen {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center;
-  align-content: center;
-  gap: 22px;
-  height: 100%;
-  min-height: 0;
-  padding: 0;
-  text-align: center;
-}
-
-.entry-copy,
-.section-heading {
-  max-width: 720px;
-}
-
 .eyebrow {
   margin: 0 0 10px;
   color: #d2aa70;
@@ -829,8 +318,11 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
+.section-heading {
+  max-width: 720px;
+}
+
 h1,
-h2,
 p {
   margin: 0;
 }
@@ -839,109 +331,15 @@ h1 {
   color: #fff5df;
   font-size: clamp(30px, 4vw, 48px);
   line-height: 1.02;
-  letter-spacing: 0;
   text-wrap: balance;
 }
 
-h2 {
-  color: #fff0d3;
-  font-size: 26px;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-
-.lead,
 .section-heading p {
   margin-top: 16px;
   max-width: 620px;
   color: #bba88a;
   font-size: 16px;
   line-height: 1.6;
-}
-
-.entry-grid {
-  width: min(960px, 100%);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(260px, 1fr));
-  gap: 14px;
-  align-content: start;
-  text-align: left;
-}
-
-.entry-card {
-  position: relative;
-  min-height: 250px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  border: 1px solid rgba(236, 202, 142, 0.18);
-  border-radius: 18px;
-  background:
-    linear-gradient(150deg, rgba(255, 244, 214, 0.11), rgba(255, 244, 214, 0.03)),
-    rgba(27, 20, 16, 0.76);
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
-  overflow: hidden;
-}
-
-.entry-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 58px 58px;
-  opacity: 0.18;
-  pointer-events: none;
-}
-
-.entry-card > * {
-  position: relative;
-}
-
-.entry-number {
-  color: #d2aa70;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-}
-
-.entry-card p {
-  max-width: 480px;
-  color: #bda98b;
-  line-height: 1.65;
-}
-
-.entry-settings {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: auto;
-}
-
-.entry-settings label {
-  display: grid;
-  gap: 6px;
-}
-
-.entry-settings span,
-.entry-notes span {
-  color: #d8c4a2;
-  font-size: 12px;
-}
-
-.entry-notes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: auto;
-}
-
-.entry-notes span {
-  padding: 6px 9px;
-  border: 1px solid rgba(236, 202, 142, 0.18);
-  border-radius: 8px;
-  background: rgba(255, 244, 214, 0.07);
 }
 
 .editor-screen {
@@ -978,6 +376,14 @@ h2 {
   font-size: clamp(26px, 3vw, 40px);
 }
 
+.match-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  -webkit-app-region: no-drag;
+}
+
 .play-layout {
   display: grid;
   grid-template-columns: minmax(540px, auto) minmax(300px, 360px);
@@ -985,15 +391,11 @@ h2 {
   align-items: stretch;
 }
 
-.board-panel,
-.match-panel {
+.board-panel {
   border: 1px solid rgba(236, 202, 142, 0.18);
   border-radius: 22px;
   background: rgba(24, 18, 14, 0.76);
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.25);
-}
-
-.board-panel {
   padding: 18px;
   overflow: auto;
 }
@@ -1004,51 +406,6 @@ h2 {
   margin-bottom: 14px;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.match-panel {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
-
-.move-log {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.result-box {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid rgba(255, 216, 148, 0.24);
-  border-radius: 12px;
-  background:
-    linear-gradient(135deg, rgba(255, 216, 148, 0.13), rgba(141, 46, 36, 0.12)),
-    rgba(32, 26, 20, 0.72);
-  color: #f7e8c7;
-}
-
-.result-box strong {
-  color: #fff4d4;
-  font-size: 20px;
-  line-height: 1.15;
-}
-
-.result-box span {
-  color: #d9bf8e;
-  font-size: 13px;
-  font-weight: 700;
 }
 
 .check-notice {
@@ -1093,82 +450,21 @@ h2 {
   transform: scale(0.92);
 }
 
-.panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.panel-title h2 {
-  font-size: 18px;
-}
-
-.panel-title span {
-  color: #a99472;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-}
-
-.moves {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 8px;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-.move,
-.empty {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-}
-
-.move {
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: rgba(255, 244, 214, 0.08);
-  color: #f1dcae;
-}
-
-.empty {
-  color: #8d7b62;
-}
-
 @media (max-width: 980px) {
-  .entry-screen,
-  .entry-grid,
   .play-layout {
     grid-template-columns: 1fr;
-  }
-
-  .play-layout {
     gap: 16px;
   }
 }
 
 @media (max-width: 680px) {
-  .titlebar,
   .main-stage {
     width: min(100vw - 24px, 1240px);
   }
 
-  .titlebar,
   .table-header {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .titlebar {
-    height: auto;
-    padding: 10px 0 0;
-  }
-
-  .entry-settings,
-  .stats-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>
