@@ -19,6 +19,7 @@
     "tauri:build:release": "scripts/build-release-local.sh",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
+    "version:bump": "node scripts/bump-version.mjs",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
