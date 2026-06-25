@@ -23,6 +23,26 @@ if [[ -z "${XIANGQI_MODELS_MANIFEST:-}" ]]; then
   export XIANGQI_MODELS_MANIFEST="https://github.com/latte03/yy-xiangqi/releases/download/models-latest/models.json"
 fi
 
+bundle_args=()
+has_bundle_arg=false
+for arg in "$@"; do
+  case "$arg" in
+    --bundles | -b | --bundles=* | --no-bundle)
+      has_bundle_arg=true
+      ;;
+  esac
+done
+if [[ "$has_bundle_arg" == false ]]; then
+  case "$target" in
+    *apple-darwin)
+      bundle_args=(--bundles app,dmg)
+      ;;
+    *windows*)
+      bundle_args=(--bundles nsis)
+      ;;
+  esac
+fi
+
 node "$root/scripts/prepare-tauri-release.mjs" \
   --app-endpoint="$app_endpoint" \
   --pubkey="$pubkey"
@@ -31,4 +51,4 @@ echo "Building sidecar for ${target}..."
 "$root/scripts/build-sidecar.sh" "$target"
 
 echo "Building Tauri release bundle..."
-pnpm tauri build --config src-tauri/tauri.release.conf.json "$@"
+pnpm tauri build --config src-tauri/tauri.release.conf.json "${bundle_args[@]}" "$@"
