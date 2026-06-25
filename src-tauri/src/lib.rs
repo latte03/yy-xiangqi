@@ -1,5 +1,7 @@
 use std::sync::Mutex;
 
+extern crate serde_json;
+
 use tauri::Manager;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;

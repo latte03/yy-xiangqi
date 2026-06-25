@@ -11,8 +11,29 @@ else
   python_bin="python3"
 fi
 
-if [[ ! -f "$root/backend/models/piece_classifier.onnx" || ! -f "$root/backend/models/board_locator.onnx" ]]; then
-  echo "backend/models must contain piece_classifier.onnx and board_locator.onnx before building the sidecar." >&2
+is_windows=false
+case "${RUNNER_OS:-}" in
+  Windows) is_windows=true ;;
+esac
+case "$target" in
+  *windows* | *-pc-windows-*) is_windows=true ;;
+esac
+case "$(uname -s 2>/dev/null || true)" in
+  MINGW* | MSYS* | CYGWIN*) is_windows=true ;;
+esac
+
+to_pyinstaller_path() {
+  local path="$1"
+  if [[ "$is_windows" == true && -n "$(command -v cygpath 2>/dev/null)" ]]; then
+    # Mixed style avoids backslash escaping surprises in PyInstaller spec files.
+    cygpath -m "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
+if [[ ! -f "$root/backend/models/piece_classifier.onnx" || ! -f "$root/backend/models/board_locator.onnx" || ! -f "$root/backend/models/version.json" ]]; then
+  echo "backend/models must contain piece_classifier.onnx, board_locator.onnx, and version.json before building the sidecar." >&2
   exit 1
 fi
 
@@ -45,16 +66,18 @@ work_path="$root/backend/build"
 spec_path="$root/backend"
 models_path="$staged_models"
 
-if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+if [[ "$is_windows" == true ]]; then
   sep=";"
-  if command -v cygpath >/dev/null 2>&1; then
-    app_path="$(cygpath -w "$app_path")"
-    dist_path="$(cygpath -w "$dist_path")"
-    work_path="$(cygpath -w "$work_path")"
-    spec_path="$(cygpath -w "$spec_path")"
-    models_path="$(cygpath -w "$models_path")"
-  fi
 fi
+
+app_path="$(to_pyinstaller_path "$app_path")"
+dist_path="$(to_pyinstaller_path "$dist_path")"
+work_path="$(to_pyinstaller_path "$work_path")"
+spec_path="$(to_pyinstaller_path "$spec_path")"
+models_path="$(to_pyinstaller_path "$models_path")"
+
+echo "Building recognizer sidecar for $target"
+echo "Using model bundle: $models_path"
 
 # 仅训练/无关的大依赖，排除以瘦身（推理端 app.py 不导入这些）
 exclude_modules=(
@@ -83,7 +106,7 @@ done
   "${exclude_args[@]}" \
   --add-data "${models_path}${sep}models"
 
-if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+if [[ "$is_windows" == true ]]; then
   mv "$root/src-tauri/binaries/recognizer.exe" "$root/src-tauri/binaries/recognizer-${target}.exe"
 else
   mv "$root/src-tauri/binaries/recognizer" "$root/src-tauri/binaries/recognizer-${target}"
